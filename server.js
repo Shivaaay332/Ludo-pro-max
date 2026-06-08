@@ -56,20 +56,15 @@ async function initDB() {
 }
 initDB();
 
-// ── AUTH MIDDLEWARE ──────────────────────────────────────────────────────────
-function requireAuth(req, res, next) {
-    if (!req.session.userId) return res.redirect('/');
-    next();
-}
-
 // ── SERVE STATIC FILES ───────────────────────────────────────────────────────
-// Protected pages
-app.get('/dashboard', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
-app.get('/game', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'game.html')));
-app.get('/profile', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile.html')));
-
-// Public static assets
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve React build in production
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, 'client', 'dist')));
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return next();
+        res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));
+    });
+}
 
 // ── AUTH API ─────────────────────────────────────────────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
