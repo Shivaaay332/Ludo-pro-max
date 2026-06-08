@@ -59,10 +59,10 @@ initDB();
 // ── SERVE STATIC FILES ───────────────────────────────────────────────────────
 // Serve React build in production
 if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.join(__dirname, 'client', 'dist')));
+    app.use(express.static(path.join(__dirname, '..', 'frontend', 'dist')));
     app.get('*', (req, res, next) => {
         if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return next();
-        res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));
+        res.sendFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'));
     });
 }
 

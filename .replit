@@ -27,7 +27,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PORT=3001 node server.js & cd client && npx vite --port 5000 --host 0.0.0.0"
+args = "PORT=3001 node backend/server.js & cd frontend && npx vite --port 5000 --host 0.0.0.0"
 waitForPort = 5000
 
 [[ports]]
