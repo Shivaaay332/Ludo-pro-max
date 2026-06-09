@@ -1,16 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 
 export default function Game() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const mountedRef = useRef(false);
 
   useEffect(() => {
-    if (mountedRef.current) return;
-    mountedRef.current = true;
-
     const roomParam = searchParams.get('room') || '';
 
     // ── GAME VARIABLES ──────────────────────────────────────────────────────
@@ -48,7 +44,8 @@ export default function Game() {
     })();
 
     // ── AUDIO ────────────────────────────────────────────────────────────────
-    document.body.addEventListener('click', () => { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }, { once: false });
+    const handleAudioInit = () => { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); };
+    document.body.addEventListener('click', handleAudioInit, { once: false });
 
     function playSound(type) {
       if (!audioCtx || audioCtx.state === 'suspended' || !soundEnabled) return;
@@ -119,6 +116,11 @@ export default function Game() {
     // ── BOARD INIT ───────────────────────────────────────────────────────────
     function initEmptyBoard() {
       const board=$('board'); if(!board)return;
+      
+      // FIX: Purane cells ko clear karein taaki Strict Mode me double na bane
+      document.querySelectorAll('.cell').forEach(c => c.remove());
+      cells = {};
+
       for(let r=1;r<=15;r++){for(let c=1;c<=15;c++){
         if((r<=6&&c<=6)||(r<=6&&c>=10)||(r>=10&&c<=6)||(r>=10&&c>=10)||(r>=7&&r<=9&&c>=7&&c<=9)) continue;
         const cell=document.createElement('div');cell.className='cell';cell.style.gridArea=`${r}/${c}`;cell.id=`c_${r}_${c}`;
@@ -398,6 +400,7 @@ export default function Game() {
     return () => {
       socket.disconnect();
       clearInterval(fireworksInterval);
+      document.body.removeEventListener('click', handleAudioInit);
       delete window.__toggleSound;
       delete window.__toggleMenu;
       delete window.__sendInteract;
@@ -408,7 +411,7 @@ export default function Game() {
       delete window.__restartGame;
       delete window.__rollDice;
     };
-  }, []);
+  }, [searchParams]); // Adding dependency array
 
   return (
     <>
