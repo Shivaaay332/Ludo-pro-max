@@ -17,7 +17,6 @@ export default function Game() {
     const homePaths = { red:[[8,2],[8,3],[8,4],[8,5],[8,6],[8,7]], green:[[2,8],[3,8],[4,8],[5,8],[6,8],[7,8]], yellow:[[8,14],[8,13],[8,12],[8,11],[8,10],[8,9]], blue:[[14,8],[13,8],[12,8],[11,8],[10,8],[9,8]] };
     const colorOffsets = { red: 0, green: 13, yellow: 26, blue: 39 };
 
-    // YAHAN FIX KIYA HAI: Direct Render connection link daal diya gaya hai!
     let socket = io("https://ludo-pro-max.onrender.com", {
         transports: ["websocket", "polling"]
     });
@@ -120,8 +119,6 @@ export default function Game() {
     // ── BOARD INIT ───────────────────────────────────────────────────────────
     function initEmptyBoard() {
       const board=$('board'); if(!board)return;
-      
-      // FIX: Purane cells ko clear karein taaki Strict Mode me double na bane
       document.querySelectorAll('.cell').forEach(c => c.remove());
       cells = {};
 
@@ -251,21 +248,32 @@ export default function Game() {
       buildActiveBases();render();updateTurnStatus();
     });
 
-    function startGame(){socket.emit('startGame',myRoomId);}
+    // ── START GAME FIX ───────────────────────────────────────────────────────
+    function startGame(){
+      const btn = document.getElementById('startBtn');
+      if(btn) btn.innerText = "Starting...";
+      
+      const safeRoomId = myRoomId || document.getElementById('roomIdInput')?.value?.trim();
+      socket.emit('startGame', safeRoomId);
+    }
     window.__startGame = startGame;
 
     function restartGame(){if(confirm('Restart game for everyone?'))socket.emit('restartGame',myRoomId);}
     window.__restartGame = restartGame;
 
     socket.on('gameStarted',(data)=>{
-      if($('lobby'))$('lobby').style.display='none';
-      if($('mainEmojiBtn'))$('mainEmojiBtn').style.display='flex';
-      if($('mainChatBtn'))$('mainChatBtn').style.display='flex';
-      if(isHost&&$('restartBtn'))$('restartBtn').style.display='block';
-      clearInterval(fireworksInterval);
-      activeColors=data.activeColors;currentTurnColor=data.turnColor;winnersRanking=[];gameResultReported=false;
-      gameState={red:[-1,-1,-1,-1],green:[-1,-1,-1,-1],yellow:[-1,-1,-1,-1],blue:[-1,-1,-1,-1]};
-      buildActiveBases();currentRoll=0;hasRolled=false;isAnimating=false;isRequestingRoll=false;updateTurnStatus();
+      try {
+        if($('lobby'))$('lobby').style.display='none';
+        if($('mainEmojiBtn'))$('mainEmojiBtn').style.display='flex';
+        if($('mainChatBtn'))$('mainChatBtn').style.display='flex';
+        if(isHost&&$('restartBtn'))$('restartBtn').style.display='block';
+        clearInterval(fireworksInterval);
+        activeColors=data.activeColors;currentTurnColor=data.turnColor;winnersRanking=[];gameResultReported=false;
+        gameState={red:[-1,-1,-1,-1],green:[-1,-1,-1,-1],yellow:[-1,-1,-1,-1],blue:[-1,-1,-1,-1]};
+        buildActiveBases();currentRoll=0;hasRolled=false;isAnimating=false;isRequestingRoll=false;updateTurnStatus();
+      } catch (e) {
+        alert("Error in loading board: " + e.message);
+      }
     });
 
     socket.on('gameRestarted',(data)=>{
@@ -397,25 +405,15 @@ export default function Game() {
       });
     }
 
-    // Init board
     initEmptyBoard();
 
-    // Cleanup
+    // FIXED CLEANUP: Isme se window. delete command hata di gayi hain, taaki start button hamesha chalta rahe!
     return () => {
       socket.disconnect();
       clearInterval(fireworksInterval);
       document.body.removeEventListener('click', handleAudioInit);
-      delete window.__toggleSound;
-      delete window.__toggleMenu;
-      delete window.__sendInteract;
-      delete window.__joinRoom;
-      delete window.__kickPlayer;
-      delete window.__answerJoinReq;
-      delete window.__startGame;
-      delete window.__restartGame;
-      delete window.__rollDice;
     };
-  }, [searchParams]); // Adding dependency array
+  }, [searchParams]);
 
   return (
     <>
