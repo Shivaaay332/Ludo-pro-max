@@ -8,8 +8,20 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
+// FIXED: SSL Connection setting add ki hai jo Supabase ko Render se jodne ke liye zaroori hai
+const pool = new Pool({ 
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -19,6 +31,11 @@ app.use(session({
     saveUninitialized: false,
     cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
+
+// NAYA: Ek simple check route banaya hai taaki hum dekh sakein backend live hua ya nahi
+app.get('/', (req, res) => {
+    res.send('🎲 Ludo Pro Max Backend is Live and Running! 🚀');
+});
 
 async function initDB() {
     try {
@@ -49,14 +66,12 @@ async function initDB() {
                 kills INTEGER DEFAULT 0
             );
         `);
-        console.log('Database initialized');
+        console.log('Database initialized successfully');
     } catch (err) {
         console.error('DB init error:', err.message);
     }
 }
 initDB();
-
-
 
 // ── AUTH API ─────────────────────────────────────────────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
