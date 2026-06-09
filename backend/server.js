@@ -7,6 +7,10 @@ const session = require('express-session');
 const path = require('path');
 
 const app = express();
+
+// YAHAN SECURITY FIX KIYA HAI: Vercel aur Render ke beech Cookies allow karne ke liye
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
@@ -15,7 +19,6 @@ const io = new Server(server, {
     }
 });
 
-// FIXED: SSL Connection setting add ki hai jo Supabase ko Render se jodne ke liye zaroori hai
 const pool = new Pool({ 
     connectionString: process.env.DATABASE_URL,
     ssl: {
@@ -25,14 +28,19 @@ const pool = new Pool({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// YAHAN COOKIE SETTINGS FIX KI HAIN
 app.use(session({
     secret: process.env.SESSION_SECRET || 'ludo_secret_key_2024',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
+    cookie: { 
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        secure: true,      // Cloud par HTTPS ke liye zaroori
+        sameSite: 'none'   // Cross-domain (Vercel se Render) ke liye zaroori
+    }
 }));
 
-// NAYA: Ek simple check route banaya hai taaki hum dekh sakein backend live hua ya nahi
 app.get('/', (req, res) => {
     res.send('🎲 Ludo Pro Max Backend is Live and Running! 🚀');
 });
