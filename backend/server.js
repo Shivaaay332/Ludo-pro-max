@@ -60,8 +60,8 @@ initDB();
 // Serve React build in production
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, '..', 'frontend', 'dist')));
-    // YAHAN CHANGE KIYA HAI: '*' ko '(.*)' kar diya gaya hai
-    app.get('(.*)', (req, res, next) => {
+    // NAYA CHANGE: 'app.get' ki jagah 'app.use' laga diya, ab crash nahi hoga!
+    app.use((req, res, next) => {
         if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return next();
         res.sendFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'));
     });
