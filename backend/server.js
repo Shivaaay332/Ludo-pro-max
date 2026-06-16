@@ -22,9 +22,9 @@ const io = new Server(server, {
 
 const pool = new Pool({ 
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('localhost') 
+        ? false 
+        : { rejectUnauthorized: false }
 });
 
 // Token storage: { token: userId }
@@ -38,14 +38,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // YAHAN COOKIE SETTINGS FIX KI HAIN
+const isProduction = process.env.NODE_ENV === 'production';
 app.use(session({
     secret: process.env.SESSION_SECRET || 'ludo_secret_key_2024',
     resave: false,
     saveUninitialized: false,
     cookie: { 
         maxAge: 7 * 24 * 60 * 60 * 1000,
-        secure: true,      // Cloud par HTTPS ke liye zaroori
-        sameSite: 'none'   // Cross-domain (Vercel se Render) ke liye zaroori
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax'
     }
 }));
 
