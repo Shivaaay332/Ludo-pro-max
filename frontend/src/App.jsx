@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Profile from './pages/Profile.jsx';
 import Game from './pages/Game.jsx';
 import Friends from './pages/Friends.jsx';
+import InstallPrompt from './components/InstallPrompt.jsx';
 
 function ProtectedRoute({ children }) {
   const [status, setStatus] = useState('loading');
@@ -29,6 +30,7 @@ function ProtectedRoute({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <InstallPrompt />
       <Routes>
         <Route path="/" element={<Auth />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

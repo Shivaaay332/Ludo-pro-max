@@ -124,7 +124,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', gap: 8, flex: 1, minHeight: 0 }}>
           
           {/* Leaderboard */}
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🏆 Top Players</div>
             {leaderboard.length === 0 ? (
               <div style={{ textAlign: 'center', color: '#666', fontSize: 11, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No data!</div>
@@ -137,13 +137,13 @@ export default function Dashboard() {
                     <div style={{ fontSize: 10, color: '#ffcc00' }}>{p.wins}W</div>
                   </div>
                 ))}
-                <button onClick={openLeaderboard} style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: 6, color: '#0084ff', fontSize: 10, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>More →</button>
+                <button onClick={openLeaderboard} style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: 'auto', padding: '6px 0', color: '#0084ff', fontSize: 10, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>More →</button>
               </>
             )}
           </div>
 
           {/* Recent Games */}
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>📋 Recent</div>
             {recentGames.length === 0 ? (
               <div style={{ textAlign: 'center', color: '#666', fontSize: 11, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No games!</div>
@@ -157,7 +157,7 @@ export default function Dashboard() {
                     <div style={{ fontSize: 9, color: '#ff3b3b' }}>💀{g.kills}</div>
                   </div>
                 ))}
-                <Link to="/profile" style={{ display: 'block', textAlign: 'center', marginTop: 6, color: '#0084ff', fontSize: 10, fontWeight: 600, textDecoration: 'none' }}>All →</Link>
+                <Link to="/profile" style={{ display: 'block', textAlign: 'center', marginTop: 'auto', padding: '6px 0', color: '#0084ff', fontSize: 10, fontWeight: 600, textDecoration: 'none' }}>All →</Link>
               </>
             )}
           </div>

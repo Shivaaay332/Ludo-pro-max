@@ -1,4 +1,12 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0;
+  touch-action: pan-y manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 :root {
   --blue: #0084ff; --green: #00b84c; --red: #ff3b3b; --yellow: #ffcc00; --purple: #7c3aed;
   font-family: 'Segoe UI', system-ui, sans-serif;
@@ -8,11 +16,16 @@ html, body {
   height: 100%;
   overflow: hidden;
   position: fixed;
+  overscroll-behavior: none;
 }
 body { color: #fff; }
 a { text-decoration: none; color: inherit; }
 button { font-family: inherit; }
-input { font-family: inherit; }
+input { 
+  font-family: inherit;
+  -webkit-user-select: text;
+  user-select: text;
+}
 #root {
   width: 100%;
   height: 100%;

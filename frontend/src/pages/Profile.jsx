@@ -52,7 +52,7 @@ export default function Profile() {
   const maxCount = Math.max(...Object.values(rankMap), 1);
 
   return (
-    <div style={{ width: '100%', height: '100vh', background: 'linear-gradient(135deg,#0a0a1a,#12122a,#1a1a35)', color: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#0a0a1a,#12122a,#1a1a35)', color: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       
       {/* Header */}
       <header style={{ background: 'rgba(0,0,0,0.5)', padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 8 }}>
@@ -66,10 +66,10 @@ export default function Profile() {
       </header>
 
       {/* Content - Scrollable */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '10px 12px' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         
         {/* Profile Card */}
-        <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 50, height: 50, borderRadius: '50%', background: 'linear-gradient(135deg,#0084ff,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, flexShrink: 0 }}>
             {user.username.charAt(0).toUpperCase()}
           </div>
@@ -81,7 +81,7 @@ export default function Profile() {
         </div>
 
         {/* Stats Row */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
           {[
             { icon: '🏆', value: user.wins, label: 'Wins', color: 'var(--yellow)' },
             { icon: '🎮', value: user.games_played, label: 'Games', color: 'var(--blue)' },
@@ -97,13 +97,13 @@ export default function Profile() {
         </div>
 
         {/* Two Column Layout */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flex: 1, minHeight: 0 }}>
           
           {/* Placement History */}
-          <div style={{ flex: 1, minWidth: '45%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10 }}>
+          <div style={{ flex: 1, minWidth: '45%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>🎯 Placement</div>
             {rankCounts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 15, color: '#666', fontSize: 11 }}>No stats yet!</div>
+              <div style={{ textAlign: 'center', padding: 15, color: '#666', fontSize: 11, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No stats yet!</div>
             ) : [1, 2, 3, 4].map(r => {
               const count = rankMap[r] || 0;
               const pct = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
@@ -125,10 +125,10 @@ export default function Profile() {
           </div>
 
           {/* Recent Games */}
-          <div style={{ flex: 1, minWidth: '45%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10 }}>
+          <div style={{ flex: 1, minWidth: '45%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>📋 Recent</div>
             {history.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 15, color: '#666', fontSize: 11 }}>No games yet!</div>
+              <div style={{ textAlign: 'center', padding: 15, color: '#666', fontSize: 11, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No games yet!</div>
             ) : history.slice(0, 4).map((g, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                 <div style={{ width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 9, background: g.rank === 1 ? 'rgba(255,215,0,0.2)' : 'rgba(255,255,255,0.1)', color: g.rank === 1 ? 'gold' : '#888' }}>{g.rank}</div>
