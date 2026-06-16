@@ -100,7 +100,7 @@ export default function Profile() {
         <div style={{ display: 'flex', gap: 8, flex: 1, minHeight: 0 }}>
           
           {/* Placement History */}
-          <div style={{ flex: 1, minWidth: '45%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minWidth: '45%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>🎯 Placement</div>
             {rankCounts.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 15, color: '#666', fontSize: 11, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No stats yet!</div>
@@ -125,7 +125,7 @@ export default function Profile() {
           </div>
 
           {/* Recent Games */}
-          <div style={{ flex: 1, minWidth: '45%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minWidth: '45%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>📋 Recent</div>
             {history.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 15, color: '#666', fontSize: 11, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No games yet!</div>

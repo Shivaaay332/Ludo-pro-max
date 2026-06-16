@@ -4,8 +4,13 @@ export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstall, setShowInstall] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
+    // Check if mobile device
+    const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    setIsMobile(checkMobile);
+
     // Check if already installed
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true);
@@ -32,7 +37,11 @@ export default function InstallPrompt() {
   }, []);
 
   async function handleInstall() {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+      // If no deferred prompt, show instructions for manual add to home screen
+      alert('To install: Open browser menu → Add to Home Screen');
+      return;
+    }
 
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
@@ -44,8 +53,13 @@ export default function InstallPrompt() {
     setShowInstall(false);
   }
 
-  // Don't show if already installed or no install prompt available
-  if (isInstalled || !showInstall) {
+  // Don't show if already installed
+  if (isInstalled) {
+    return null;
+  }
+
+  // Show install button on mobile OR when deferred prompt is available
+  if (!isMobile && !showInstall) {
     return null;
   }
 
@@ -73,7 +87,7 @@ export default function InstallPrompt() {
       }}
     >
       <span style={{ fontSize: 18 }}>📲</span>
-      Install App
+      {isMobile ? 'Add to Home Screen' : 'Install App'}
     </button>
   );
 }
