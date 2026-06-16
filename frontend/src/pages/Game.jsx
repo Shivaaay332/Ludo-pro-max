@@ -331,22 +331,41 @@ export default function Game() {
       if(isHost&&!wasHost){alert('The previous host left. YOU are now the Host!');wasHost=true;}
       let lobbyText='Players Joined:<br><br>',adminText='';
       data.players.forEach((p,i)=>{
-        lobbyText+=`<div style="margin-bottom:5px;">${i+1}. ${p.name} (${p.color.toUpperCase()})</div>`;
+        lobbyText+=`<div style="margin-bottom:5px;">${i+1}. ${p.name} (${p.color.toUpperCase()}) ${p.online?'🟢':'🔴'}</div>`;
         const status=p.online?'🟢':'🔴';
         adminText+=`<div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:bold;font-size:14px;">${i+1}. ${p.name} ${status}</span>`;
         if(isHost&&p.id!==socket.id)adminText+=`<button class="kick-btn" onclick="window.__kickPlayer('${p.id}')">KICK</button>`;
         adminText+=`</div>`;
         const dot=$(`status-${p.color}`);if(dot){if(p.online)dot.classList.remove('offline');else dot.classList.add('offline');}
       });
-      if($('adminPlayerList'))$('adminPlayerList').innerHTML=adminText;
+      
+      // Update lobby's host controls
+      const lobbyAdminList = $('adminPlayerList');
+      const lobbyHostControls = $('hostControls');
+      if(lobbyAdminList) lobbyAdminList.innerHTML=adminText;
+      if(lobbyHostControls) lobbyHostControls.style.display = (isHost && data.players.length > 0) ? 'block' : 'none';
+      
+      // Update in-game admin modal
+      const gameAdminList = $('adminPlayerList');
+      if(gameAdminList) gameAdminList.innerHTML=adminText;
+      
       if(isHost&&data.players.length>0){
         if($('adminBtn'))$('adminBtn').style.display='block';
-        if(activeColors.length>0){if($('restartBtn'))$('restartBtn').style.display='block';if($('startBtn'))$('startBtn').style.display='none';}
-        else{if($('startBtn'))$('startBtn').style.display='block';if($('restartBtn'))$('restartBtn').style.display='none';}
+        if(activeColors.length>0){
+          if($('restartBtn'))$('restartBtn').style.display='block';
+          if($('restartLobbyBtn'))$('restartLobbyBtn').style.display='block';
+          if($('startBtn'))$('startBtn').style.display='none';
+        }
+        else{
+          if($('startBtn'))$('startBtn').style.display='block';
+          if($('restartBtn'))$('restartBtn').style.display='none';
+          if($('restartLobbyBtn'))$('restartLobbyBtn').style.display='none';
+        }
       } else {
         if($('startBtn'))$('startBtn').style.display='none';
         if($('adminBtn'))$('adminBtn').style.display='none';
         if($('restartBtn'))$('restartBtn').style.display='none';
+        if($('restartLobbyBtn'))$('restartLobbyBtn').style.display='none';
         if(!isHost&&activeColors.length===0)lobbyText+='<br>Waiting for Host to start...';
       }
       if($('lobbyStatus'))$('lobbyStatus').innerHTML=lobbyText;
@@ -434,6 +453,8 @@ export default function Game() {
     window.__rollDice = requestDiceRoll;
 
     socket.on('diceRolled',(data)=>{
+      // Clear any previous turn timeout
+      if(window.__turnTimeout){clearTimeout(window.__turnTimeout);window.__turnTimeout=null;}
       isRequestingRoll=false;isAnimating=true;playSound('dice');
       const d=$(`dice-${data.color}`);if(d)d.classList.add('rolling');
       setTimeout(()=>{currentRoll=data.roll;if(d)d.classList.remove('rolling');drawDice(data.color,currentRoll);isAnimating=false;hasRolled=true;checkMovesLocally(data.color);},500);
@@ -443,13 +464,26 @@ export default function Game() {
       const playable=[];
       gameState[color].forEach((pos,i)=>{if((pos===-1&&currentRoll===6)||(pos!==-1&&pos+currentRoll<=56)){playable.push(i);if(color===myColor){const t=$(`t_${color}_${i}`);if(t)t.classList.add('highlight');}}});
       if(color===myColor){
+        // Auto-pass if no moves available
         if(playable.length===0)setTimeout(()=>socket.emit('passTurn',{roomId:myRoomId}),800);
+        // Auto-move if only one option
         else if(playable.length===1)setTimeout(()=>requestTokenMove(color,playable[0]),400);
+        // Auto-pass after 15 seconds if no move selected
+        else {
+          window.__turnTimeout = setTimeout(() => {
+            if(myColor === color && hasRolled) {
+              socket.emit('passTurn',{roomId:myRoomId});
+              showToast('⏰ Auto-passed (no move selected)');
+            }
+          }, 15000);
+        }
       }
     }
 
     function requestTokenMove(color,idx){
       if(currentTurnColor!==color||myColor!==color||!hasRolled||isAnimating)return;
+      // Clear auto-pass timeout
+      if(window.__turnTimeout){clearTimeout(window.__turnTimeout);window.__turnTimeout=null;}
       const pos=gameState[color][idx];
       if(pos===-1&&currentRoll!==6)return;if(pos!==-1&&pos+currentRoll>56)return;
       hasRolled=false;document.querySelectorAll('.token').forEach(t=>t.classList.remove('highlight'));
@@ -546,6 +580,14 @@ export default function Game() {
 
     initEmptyBoard();
 
+    // Setup rejoin modal button handlers
+    setTimeout(() => {
+      const rejoinBtn = document.getElementById('rejoinBtn');
+      const leaveBtn = document.getElementById('leaveBtn');
+      if (rejoinBtn) rejoinBtn.addEventListener('click', () => window.__attemptRejoin && window.__attemptRejoin());
+      if (leaveBtn) leaveBtn.addEventListener('click', () => window.__leaveFromRejoin && window.__leaveFromRejoin());
+    }, 100);
+
     // FIXED CLEANUP: Isme se window. delete command hata di gayi hain, taaki start button hamesha chalta rahe!
     return () => {
       socket.disconnect();
@@ -565,12 +607,19 @@ export default function Game() {
       <div id="lobby">
         <div className="lobby-box">
           <h1 style={{ color: 'var(--yellow)', marginBottom: 20 }}>🎲 Ludo Pro</h1>
-          <input type="text" id="playerNameInput" placeholder="Your Name" maxLength={10} readOnly />
-          <input type="text" id="roomIdInput" placeholder="Enter Room Code" />
+          <input type="text" id="playerNameInput" placeholder="Your Name" maxLength={10} readOnly style={{ touchAction: 'pan-y', WebkitUserSelect: 'text', userSelect: 'text' }} />
+          <input type="text" id="roomIdInput" placeholder="Enter Room Code" style={{ touchAction: 'pan-y', WebkitUserSelect: 'text', userSelect: 'text' }} />
           <button id="joinBtn" onClick={() => window.__joinRoom && window.__joinRoom()}>Join Game</button>
-          <div id="lobbyStatus" style={{ marginTop: 15, color: '#aaa', fontWeight: 'bold' }}></div>
+          <div id="lobbyStatus" style={{ marginTop: 15, color: '#aaa', fontWeight: 'bold', textAlign: 'left', padding: '0 10px' }}></div>
           <button id="startBtn" className="btn-green" onClick={() => window.__startGame && window.__startGame()}>▶ Start Game</button>
-          
+          <button id="restartLobbyBtn" className="btn-red" style={{ display: 'none', marginTop: 10 }} onClick={() => window.__restartGame && window.__restartGame()}>↻ Restart Game</button>
+
+          {/* Host Controls - Kick Players */}
+          <div id="hostControls" style={{ marginTop: 15, display: 'none' }}>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 8, textAlign: 'left' }}>⚙️ Host Controls</div>
+            <div id="adminPlayerList" style={{ textAlign: 'left', marginBottom: 10 }}></div>
+          </div>
+
           {/* Share Room Section */}
           <div id="shareSection" style={{ marginTop: 20, display: 'none' }}>
             <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>📤 Share Room Link</div>
@@ -792,7 +841,7 @@ const gameStyles = `
   .go-btn-close { background:rgba(255,255,255,0.1); color:#ccc; }
   .score-toast { position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:rgba(0,180,0,0.92); color:white; padding:8px 16px; border-radius:16px; font-weight:bold; z-index:5000; opacity:0; transition:opacity 0.4s; pointer-events:none; white-space:nowrap; font-size:13px; }
   .score-toast.show { opacity:1; }
-  .chat-panel { display:none; position:fixed; bottom:70px; right:10px; width:280px; height:350px; background:rgba(26,26,46,0.98); border:2px solid var(--blue); border-radius:12px; flex-direction:column; z-index:2000; box-shadow:0 8px 30px rgba(0,0,0,0.5); }
+  .chat-panel { display:none; position:fixed; bottom:60px; right:10px; width:280px; height:350px; background:rgba(26,26,46,0.98); border:2px solid var(--blue); border-radius:12px; flex-direction:column; z-index:2000; box-shadow:0 8px 30px rgba(0,0,0,0.5); overflow:hidden; }
   .chat-panel.show { display:flex; }
   .chat-header { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:rgba(0,132,255,0.2); border-radius:10px 10px 0 0; font-weight:bold; font-size:13px; }
   .chat-messages { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:6px; }
@@ -803,11 +852,15 @@ const gameStyles = `
   .chat-input-container button { padding:8px 12px; background:var(--blue); border:none; border-radius:16px; color:white; font-weight:bold; cursor:pointer; width:auto; }
   
   @media (max-width: 500px) {
-    header { padding: 6px 10px; }
-    .status-text { font-size: 11px !important; padding: 5px 10px !important; }
-    .btn-interact { width: 32px !important; height: 32px !important; font-size: 14px !important; }
-    .go-box { padding: 16px !important; }
-    .go-btn { padding: 8px !important; font-size: 12px !important; min-width: 80px; }
-    .chat-panel { width: 90% !important; height: 50vh !important; bottom: 65px !important; right: 5% !important; }
+    header { padding: 6px 8px; }
+    header h2 { font-size: 14px !important; }
+    .status-text { font-size: 10px !important; padding: 4px 8px !important; }
+    .btn-interact { width: 30px !important; height: 30px !important; font-size: 12px !important; }
+    .go-box { padding: 14px !important; }
+    .go-btn { padding: 8px !important; font-size: 11px !important; min-width: 70px; }
+    .chat-panel { width: calc(100% - 20px) !important; max-width: 320px !important; height: 45vh !important; bottom: 55px !important; right: 10px !important; left: 10px !important; }
+    .lobby-box { padding: 20px 15px !important; }
+    .lobby-box input { padding: 10px !important; font-size: 14px !important; }
+    .lobby-box button { padding: 10px !important; font-size: 15px !important; }
   }
 `;
