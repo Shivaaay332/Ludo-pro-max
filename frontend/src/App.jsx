@@ -9,14 +9,19 @@ function ProtectedRoute({ children }) {
   const [status, setStatus] = useState('loading');
 
   useEffect(() => {
-    fetch('/api/auth/me')
+    const token = localStorage.getItem('ludo_token');
+    const url = token ? '/api/auth/me?token=' + encodeURIComponent(token) : '/api/auth/me';
+    fetch(url)
       .then(r => r.json())
       .then(d => setStatus(d.success ? 'ok' : 'unauth'))
       .catch(() => setStatus('unauth'));
   }, []);
 
   if (status === 'loading') return <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg,#0a0a1a,#12122a,#1a1a35)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: 18 }}>Loading...</div>;
-  if (status === 'unauth') return <Navigate to="/" replace />;
+  if (status === 'unauth') {
+    localStorage.removeItem('ludo_token');
+    return <Navigate to="/" replace />;
+  }
   return children;
 }
 

@@ -37,9 +37,11 @@ export default function Game() {
     // ── AUTH CHECK ───────────────────────────────────────────────────────────
     (async () => {
       try {
-        const res = await fetch('/api/auth/me');
+        const token = localStorage.getItem('ludo_token');
+        const url = token ? '/api/auth/me?token=' + encodeURIComponent(token) : '/api/auth/me';
+        const res = await fetch(url);
         const data = await res.json();
-        if (!data.success) { navigate('/'); return; }
+        if (!data.success) { localStorage.removeItem('ludo_token'); navigate('/'); return; }
         currentUser = data.user;
         if ($('playerNameInput')) $('playerNameInput').value = data.user.username;
         if (roomParam && $('roomIdInput')) $('roomIdInput').value = roomParam;
@@ -156,6 +158,8 @@ export default function Game() {
     function getPlayerName(col){const p=roomPlayersInfo.find(x=>x.color===col);return p?p.name:col;}
 
     // ── JOIN ROOM ────────────────────────────────────────────────────────────
+    let reconnectRoomId = null;
+    
     function joinRoom() {
       const inputName=($('playerNameInput')?.value||'').trim()||currentUser?.username||'Player';
       const inputCode=($('roomIdInput')?.value||'').trim();
@@ -165,9 +169,39 @@ export default function Game() {
       if($('joinBtn'))$('joinBtn').style.display='none';
       if($('lobbyStatus'))$('lobbyStatus').innerHTML='Connecting...';
       myRoomId=inputCode;
-      socket.emit('joinRoom',{id:myRoomId,name:inputName});
+      socket.emit('joinRoom',{id:myRoomId,name:inputName,userId:currentUser?.id});
+      
+      // Show share section
+      if($('shareSection'))$('shareSection').style.display='block';
+      const shareLink = window.location.origin + '/game?room=' + encodeURIComponent(inputCode);
+      if($('shareLinkInput'))$('shareLinkInput').value=shareLink;
     }
     window.__joinRoom = joinRoom;
+
+    // Rejoin functionality
+    function attemptRejoin() {
+      if (!reconnectRoomId || !currentUser?.id) return;
+      socket.emit('rejoinRoom', { roomId: reconnectRoomId, userId: currentUser.id });
+    }
+    window.__attemptRejoin = attemptRejoin;
+    
+    // Leave from rejoin modal
+    function leaveFromRejoin() {
+      reconnectRoomId = null;
+      localStorage.removeItem('lastRoomId');
+      if($('rejoinModal'))$('rejoinModal').style.display='none';
+      navigate('/dashboard');
+    }
+    window.__leaveFromRejoin = leaveFromRejoin;
+
+    // Check for stored room ID on page load
+    if (roomParam) {
+      const storedRoom = localStorage.getItem('lastRoomId');
+      if (storedRoom && storedRoom !== roomParam) {
+        // User has previous room, show rejoin option
+        reconnectRoomId = storedRoom;
+      }
+    }
 
     socket.on('errorMsg',(msg)=>{
       alert(msg);
@@ -181,11 +215,116 @@ export default function Game() {
       if($('playerNameInput'))$('playerNameInput').style.display='none';
       if($('roomIdInput'))$('roomIdInput').style.display='none';
       if($('joinBtn'))$('joinBtn').style.display='none';
+      if($('rejoinModal'))$('rejoinModal').style.display='none';
       myColor=data.color; isHost=data.isHost; myName=data.name; wasHost=isHost;
+      reconnectRoomId = data.roomId;
+      localStorage.setItem('lastRoomId', data.roomId);
       if($('roomCodeDisplay'))$('roomCodeDisplay').innerText=`Room: ${data.roomId}`;
       if($('myColorDisp'))$('myColorDisp').innerHTML=`You: <b style="color:var(--${myColor})">${myName} (${myColor.toUpperCase()})</b>`;
       const gw=$('gameWrapper');if(gw)gw.style.setProperty('--board-rot',colorRotations[myColor]);
+      
+      // Show share section
+      if($('shareSection'))$('shareSection').style.display='block';
+      const shareLink = window.location.origin + '/game?room=' + encodeURIComponent(data.roomId);
+      if($('shareLinkInput'))$('shareLinkInput').value=shareLink;
     });
+
+    socket.on('rejoined',(data)=>{
+      if($('rejoinModal'))$('rejoinModal').style.display='none';
+      myColor=data.color; isHost=data.isHost; myName=data.name; wasHost=isHost;
+      reconnectRoomId = data.roomId;
+      localStorage.setItem('lastRoomId', data.roomId);
+      if($('roomCodeDisplay'))$('roomCodeDisplay').innerText=`Room: ${data.roomId}`;
+      if($('myColorDisp'))$('myColorDisp').innerHTML=`You: <b style="color:var(--${myColor})">${myName} (${myColor.toUpperCase()})</b>`;
+      const gw=$('gameWrapper');if(gw)gw.style.setProperty('--board-rot',colorRotations[myColor]);
+      
+      // If game is in progress, restore state
+      if(data.gameState) {
+        activeColors = data.gameState.activeColors;
+        currentTurnColor = data.gameState.turnColor;
+        gameState = data.gameState.gameState;
+        buildActiveBases();
+        render();
+        updateTurnStatus();
+      }
+      
+      showToast('🔄 Reconnected!');
+    });
+
+    // Player disconnected/reconnected
+    socket.on('playerDisconnected',(data)=>{
+      showToast(`${data.name} disconnected`);
+    });
+    
+    socket.on('playerRejoined',(data)=>{
+      showToast(`${data.name} reconnected!`);
+    });
+
+    // Game invite
+    socket.on('gameInvite',(data)=>{
+      if($('inviteText'))$('inviteText').innerText=`${data.fromName} invited you to play! Room: ${data.roomId}`;
+      if($('inviteModal'))$('inviteModal').style.display='flex';
+      window.__inviteRoom = data.roomId;
+    });
+    
+    if(typeof window.__acceptInvite === 'undefined') {
+      window.__acceptInvite = function() {
+        const room = window.__inviteRoom;
+        if($('inviteModal'))$('inviteModal').style.display='none';
+        if(room) {
+          navigate('/game?room=' + encodeURIComponent(room));
+        }
+      };
+    }
+    
+    if(typeof window.__declineInvite === 'undefined') {
+      window.__declineInvite = function() {
+        if($('inviteModal'))$('inviteModal').style.display='none';
+      };
+    }
+
+    // In-game chat
+    function sendChatMsg() {
+      const input = $('chatInput');
+      if(!input || !input.value.trim()) return;
+      const msg = input.value.trim();
+      input.value = '';
+      socket.emit('sendChat', { roomId: myRoomId, message: msg });
+    }
+    window.__sendChatMsg = sendChatMsg;
+    
+    socket.on('chatHistory', (data) => {
+      const container = $('chatMessages');
+      if(!container) return;
+      container.innerHTML = '';
+      data.messages.forEach(msg => addChatMessage(msg));
+    });
+    
+    socket.on('newChat', (data) => {
+      addChatMessage(data);
+    });
+    
+    function addChatMessage(data) {
+      const container = $('chatMessages');
+      if(!container) return;
+      const colorHex = { blue: '#0084ff', red: '#ff3b3b', green: '#00b84c', yellow: '#ffcc00' };
+      const msgEl = document.createElement('div');
+      msgEl.className = 'chat-msg';
+      msgEl.innerHTML = `<span class="chat-username" style="color:${colorHex[data.color]||'#fff'}">${esc(data.user)}:</span> ${esc(data.message)}`;
+      container.appendChild(msgEl);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Setup chat button to open panel
+    const originalToggleMenu = toggleMenu;
+    toggleMenu = function(id) {
+      originalToggleMenu(id);
+      if(id === 'chatMenu') {
+        const chatPanel = $('chatPanel');
+        if(chatPanel) chatPanel.classList.add('show');
+      }
+    };
+    window.__toggleMenu = toggleMenu;
 
     socket.on('updatePlayers',(data)=>{
       roomPlayersInfo=data.players; isHost=(socket.id===data.hostId);
@@ -431,8 +570,41 @@ export default function Game() {
           <button id="joinBtn" onClick={() => window.__joinRoom && window.__joinRoom()}>Join Game</button>
           <div id="lobbyStatus" style={{ marginTop: 15, color: '#aaa', fontWeight: 'bold' }}></div>
           <button id="startBtn" className="btn-green" onClick={() => window.__startGame && window.__startGame()}>▶ Start Game</button>
+          
+          {/* Share Room Section */}
+          <div id="shareSection" style={{ marginTop: 20, display: 'none' }}>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>📤 Share Room Link</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input type="text" id="shareLinkInput" readOnly style={{ flex: 1, padding: '10px', fontSize: 12, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff' }} />
+              <button id="copyLinkBtn" onClick={() => { const link = document.getElementById('shareLinkInput').value; navigator.clipboard.writeText(link); showToast('Link copied!'); }} style={{ padding: '10px 15px', background: 'var(--green)', border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>📋</button>
+            </div>
+          </div>
         </div>
         <button className="btn-back" onClick={() => window.location.href = '/dashboard'} style={{ width: '90%', maxWidth: 400, background: 'rgba(255,255,255,0.08)' }}>← Back to Dashboard</button>
+      </div>
+      
+      {/* REJOIN MODAL */}
+      <div id="rejoinModal" className="modal-overlay">
+        <div className="req-box" style={{ borderColor: 'var(--yellow)' }}>
+          <h3 style={{ color: 'var(--yellow)', marginBottom: 15 }}>🔄 Rejoin Match?</h3>
+          <p style={{ color: '#ccc', marginBottom: 15, fontSize: 14 }}>You were disconnected from the game. Would you like to rejoin?</p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button id="rejoinBtn" style={{ background: 'var(--green)', flex: 1 }}>Rejoin Game</button>
+            <button id="leaveBtn" style={{ background: 'var(--red)', flex: 1 }}>Leave</button>
+          </div>
+        </div>
+      </div>
+      
+      {/* GAME INVITE MODAL */}
+      <div id="inviteModal" className="modal-overlay">
+        <div className="req-box" style={{ borderColor: 'var(--blue)' }}>
+          <h3 style={{ color: 'var(--blue)', marginBottom: 15 }}>🎮 Game Invite!</h3>
+          <p id="inviteText" style={{ color: '#ccc', marginBottom: 15 }}></p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button id="acceptInviteBtn" style={{ background: 'var(--green)', flex: 1 }}>Accept</button>
+            <button id="declineInviteBtn" style={{ background: 'var(--red)', flex: 1 }}>Decline</button>
+          </div>
+        </div>
       </div>
 
       {/* JOIN REQUEST MODAL */}
@@ -464,7 +636,8 @@ export default function Game() {
           <div className="go-saved" id="goSaved">✅ Scores saved to leaderboard!</div>
           <div className="go-actions">
             <button className="go-btn go-btn-dash" onClick={() => window.location.href = '/dashboard'}>🏠 Dashboard</button>
-            <button className="go-btn go-btn-close" onClick={() => { const m = document.getElementById('gameOverModal'); if (m) m.style.display = 'none'; }}>Close</button>
+            <button className="go-btn go-btn-restart" id="goRestartBtn" style={{ background: 'linear-gradient(135deg,#0084ff,#5b21b6)', color: 'white' }} onClick={() => window.__restartGame && window.__restartGame()}>↻ Play Again</button>
+            <button className="go-btn go-btn-close" onClick={() => { const m = document.getElementById('gameOverModal'); if (m) m.style.display = 'none'; }}>✕ Exit</button>
           </div>
         </div>
       </div>
@@ -479,6 +652,7 @@ export default function Game() {
           <div id="roomCodeDisplay" style={{ fontWeight: 'bold', color: 'var(--yellow)', fontSize: 13 }}>Room: ---</div>
           <button id="adminBtn" className="btn-green" style={{ padding: '4px 8px', fontSize: 12, width: 'auto', display: 'none' }} onClick={() => { const m = document.getElementById('adminModal'); if (m) m.style.display = 'flex'; }}>⚙️</button>
           <button id="restartBtn" className="btn-red" style={{ padding: '4px 8px', fontSize: 12, width: 'auto', display: 'none' }} onClick={() => window.__restartGame && window.__restartGame()}>↻</button>
+          <button id="exitBtn" className="btn-exit" style={{ padding: '4px 10px', fontSize: 12, width: 'auto', background: 'var(--red)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }} onClick={() => { if(confirm('Exit game and leave room?')) { socket.disconnect(); window.location.href = '/dashboard'; } }}>🚪 Exit</button>
         </div>
       </header>
 
@@ -514,6 +688,19 @@ export default function Game() {
             <div className="btn-interact" onClick={() => window.__toggleMenu && window.__toggleMenu('chatMenu')} style={{ display: 'none' }} id="mainChatBtn">💬</div>
             <div className="btn-interact" onClick={() => window.__toggleMenu && window.__toggleMenu('emojiMenu')} style={{ display: 'none' }} id="mainEmojiBtn">😀</div>
           </div>
+        </div>
+      </div>
+      
+      {/* IN-GAME CHAT PANEL */}
+      <div id="chatPanel" className="chat-panel">
+        <div className="chat-header">
+          <span>💬 Game Chat</span>
+          <button id="closeChatBtn" onClick={() => { const p = document.getElementById('chatPanel'); if(p) p.classList.remove('show'); }} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+        <div className="chat-messages" id="chatMessages"></div>
+        <div className="chat-input-container">
+          <input type="text" id="chatInput" placeholder="Type a message..." maxLength={200} onKeyDown={(e) => { if(e.key === 'Enter') window.__sendChatMsg && window.__sendChatMsg(); }} />
+          <button id="sendChatBtn" onClick={() => window.__sendChatMsg && window.__sendChatMsg()}>Send</button>
         </div>
       </div>
     </>
@@ -597,10 +784,97 @@ const gameStyles = `
   .go-name { flex:1; font-weight:700; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .go-kills { color:#ff6b6b; font-size:13px; font-weight:700; }
   .go-saved { color:#00d45a; font-size:12px; text-align:center; margin-top:12px; display:none; }
-  .go-actions { display:flex; gap:10px; margin-top:16px; }
-  .go-btn { flex:1; padding:12px; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; transition:0.2s; }
+  .go-actions { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  .go-btn { flex:1; min-width:100px; padding:12px; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; transition:0.2s; }
   .go-btn-dash { background:linear-gradient(135deg,#b8860b,#ffd700); color:#000; }
+  .go-btn-restart { background:linear-gradient(135deg,#0084ff,#5b21b6); color:#fff; }
   .go-btn-close { background:rgba(255,255,255,0.1); color:#ccc; }
   .score-toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(0,180,0,0.92); color:white; padding:10px 20px; border-radius:20px; font-weight:bold; z-index:5000; opacity:0; transition:opacity 0.4s; pointer-events:none; white-space:nowrap; font-size:14px; }
   .score-toast.show { opacity:1; }
+  
+  /* Mobile Responsive */
+  @media (max-width: 600px) {
+    .game-wrapper { width: 95vw !important; height: 95vw !important; }
+    .header { padding: 8px 10px !important; }
+    .status-text { font-size: 13px !important; padding: 6px 10px !important; }
+    .btn-interact { width: 36px !important; height: 36px !important; font-size: 16px !important; }
+    .go-box { padding: 20px !important; }
+    .go-btn { padding: 10px !important; font-size: 13px !important; }
+    .chat-panel { width: 100% !important; height: 50vh !important; bottom: 0 !important; right: 0 !important; border-radius: 20px 20px 0 0 !important; }
+  }
+  
+  /* Chat Panel Styles */
+  .chat-panel {
+    display: none;
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 320px;
+    height: 400px;
+    background: rgba(26, 26, 46, 0.98);
+    border: 2px solid var(--blue);
+    border-radius: 15px;
+    flex-direction: column;
+    z-index: 2000;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+  .chat-panel.show {
+    display: flex;
+  }
+  .chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: rgba(0, 132, 255, 0.2);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 13px 13px 0 0;
+    font-weight: bold;
+    font-size: 14px;
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .chat-msg {
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+  }
+  .chat-username {
+    font-weight: bold;
+    margin-right: 4px;
+  }
+  .chat-input-container {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .chat-input-container input {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 14px;
+    margin-bottom: 0;
+  }
+  .chat-input-container button {
+    padding: 10px 15px;
+    background: var(--blue);
+    border: none;
+    border-radius: 20px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    width: auto;
+  }
 `;

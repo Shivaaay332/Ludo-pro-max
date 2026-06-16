@@ -3,7 +3,75 @@
   --blue: #0084ff; --green: #00b84c; --red: #ff3b3b; --yellow: #ffcc00; --purple: #7c3aed;
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
-body { color: #fff; }
+body { 
+  color: #fff; 
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
 a { text-decoration: none; color: inherit; }
 button { font-family: inherit; }
 input { font-family: inherit; }
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  /* Dashboard Grid */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  /* Leaderboard and Recent Games */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Navigation */
+  nav {
+    padding: 0 12px !important;
+  }
+  
+  /* Main Content */
+  main {
+    padding: 16px 12px !important;
+  }
+  
+  /* Auth Page */
+  .auth-container {
+    padding: 16px !important;
+  }
+  
+  .auth-box {
+    padding: 24px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Auth Page */
+  .auth-logo {
+    font-size: 36px !important;
+  }
+  
+  .auth-title {
+    font-size: 32px !important;
+  }
+  
+  /* Dashboard */
+  .welcome-text {
+    font-size: 20px !important;
+  }
+  
+  .stat-card {
+    padding: 16px !important;
+  }
+  
+  .stat-value {
+    font-size: 28px !important;
+  }
+}
+
+/* Touch-friendly buttons */
+@media (pointer: coarse) {
+  button, .clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

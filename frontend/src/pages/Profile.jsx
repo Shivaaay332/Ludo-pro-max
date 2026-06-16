@@ -6,6 +6,15 @@ const medals = { 1: '🥇', 2: '🥈', 3: '🥉', 4: '💔' };
 const rankColors = { 1: 'gold', 2: '#c0c0c0', 3: '#cd7f32', 4: '#555' };
 const rankLabels = { 1: '1st Place 🥇', 2: '2nd Place 🥈', 3: '3rd Place 🥉', 4: 'Last Place' };
 
+// Helper function for authenticated fetch
+function authFetch(url, options = {}) {
+  const token = localStorage.getItem('ludo_token');
+  if (token) {
+    options.headers = { ...options.headers, 'Authorization': 'Bearer ' + token };
+  }
+  return fetch(url, options);
+}
+
 export default function Profile() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -15,9 +24,12 @@ export default function Profile() {
 
   useEffect(() => {
     async function init() {
-      const me = await fetch('/api/auth/me').then(r => r.json());
-      if (!me.success) { navigate('/'); return; }
-      const data = await fetch('/api/profile').then(r => r.json());
+      const me = await authFetch('/api/auth/me').then(r => r.json());
+      if (!me.success) { 
+        localStorage.removeItem('ludo_token');
+        navigate('/'); return; 
+      }
+      const data = await authFetch('/api/profile').then(r => r.json());
       if (!data.success) return;
       setUser(data.user);
       setHistory(data.history);
@@ -28,7 +40,8 @@ export default function Profile() {
   }, [navigate]);
 
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await authFetch('/api/auth/logout', { method: 'POST' });
+    localStorage.removeItem('ludo_token');
     navigate('/');
   }
 
@@ -68,7 +81,7 @@ export default function Profile() {
           <Link to="/dashboard" style={{ marginLeft: 'auto', background: 'linear-gradient(135deg,#0084ff,#5b21b6)', color: '#fff', padding: '14px 28px', borderRadius: 12, fontSize: 15, fontWeight: 700 }}>🎮 Play Now</Link>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }} className="stats-grid">
           {[
             { icon: '🏆', value: user.wins, label: 'Wins', color: 'var(--yellow)' },
             { icon: '🎮', value: user.games_played, label: 'Games', color: 'var(--blue)' },
@@ -83,7 +96,7 @@ export default function Profile() {
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 20 }} className="dashboard-grid">
           <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 24 }}>
             <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 18 }}>🎯 Placement History</div>
             {rankCounts.length === 0 ? (

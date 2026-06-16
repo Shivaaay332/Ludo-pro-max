@@ -5,6 +5,15 @@ const colorHex = { blue: '#0084ff', red: '#ff3b3b', green: '#00b84c', yellow: '#
 
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
+// Helper function for authenticated fetch
+function authFetch(url, options = {}) {
+  const token = localStorage.getItem('ludo_token');
+  if (token) {
+    options.headers = { ...options.headers, 'Authorization': 'Bearer ' + token };
+  }
+  return fetch(url, options);
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -14,20 +23,112 @@ export default function Dashboard() {
   const [lbModal, setLbModal] = useState(false);
   const [fullLb, setFullLb] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Friends state
+  const [friends, setFriends] = useState([]);
+  const [receivedRequests, setReceivedRequests] = useState([]);
+  const [friendsModal, setFriendsModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     async function init() {
-      const me = await fetch('/api/auth/me').then(r => r.json());
-      if (!me.success) { navigate('/'); return; }
-      const dash = await fetch('/api/dashboard').then(r => r.json());
+      const me = await authFetch('/api/auth/me').then(r => r.json());
+      if (!me.success) { 
+        localStorage.removeItem('ludo_token');
+        navigate('/'); return; 
+      }
+      const dash = await authFetch('/api/dashboard').then(r => r.json());
       if (!dash.success) return;
       setUser(dash.user);
       setLeaderboard(dash.leaderboard);
       setRecentGames(dash.recentGames);
       setLoading(false);
+      
+      // Load friends
+      loadFriends();
     }
     init();
   }, [navigate]);
+
+  async function loadFriends() {
+    const data = await authFetch('/api/friends').then(r => r.json());
+    if (data.success) {
+      setFriends(data.friends || []);
+      setReceivedRequests(data.receivedRequests || []);
+    }
+  }
+
+  async function searchUsers(query) {
+    if (query.length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    const data = await authFetch('/api/users/search?q=' + encodeURIComponent(query)).then(r => r.json());
+    if (data.success) setSearchResults(data.users || []);
+    setSearching(false);
+  }
+
+  async function sendFriendRequest(userId, username) {
+    const data = await authFetch('/api/friends/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    }).then(r => r.json());
+    if (data.success) {
+      alert('Friend request sent to ' + username + '!');
+      setSearchResults(searchResults.filter(u => u.id !== userId));
+    } else {
+      alert(data.error || 'Failed to send request');
+    }
+  }
+
+  async function acceptFriendRequest(fromUserId) {
+    const data = await authFetch('/api/friends/accept', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromUserId })
+    }).then(r => r.json());
+    if (data.success) {
+      loadFriends();
+      alert('Friend added!');
+    }
+  }
+
+  async function rejectFriendRequest(fromUserId) {
+    await authFetch('/api/friends/reject', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromUserId })
+    });
+    loadFriends();
+  }
+
+  async function removeFriend(friendId) {
+    if (!confirm('Remove this friend?')) return;
+    await authFetch('/api/friends/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ friendId })
+    });
+    loadFriends();
+  }
+
+  async function inviteFriend(friendId, username) {
+    if (!roomCode.trim()) {
+      alert('Generate a room code first!');
+      return;
+    }
+    const data = await authFetch('/api/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId: roomCode, friendId })
+    }).then(r => r.json());
+    if (data.success) {
+      alert('Invite sent to ' + username + '!');
+    } else {
+      alert(data.error || 'Failed to send invite');
+    }
+  }
 
   function genCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -43,12 +144,13 @@ export default function Dashboard() {
 
   async function openLeaderboard() {
     setLbModal(true);
-    const data = await fetch('/api/leaderboard').then(r => r.json());
+    const data = await authFetch('/api/leaderboard').then(r => r.json());
     if (data.success) setFullLb(data.players);
   }
 
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await authFetch('/api/auth/logout', { method: 'POST' });
+    localStorage.removeItem('ludo_token');
     navigate('/');
   }
 
@@ -64,20 +166,97 @@ export default function Dashboard() {
         <div style={{ display: 'flex', gap: 6 }}>
           <NavLink to="/dashboard" active>Dashboard</NavLink>
           <NavLink to="/profile">Profile</NavLink>
+          <button onClick={() => setFriendsModal(true)} style={{ padding: '8px 16px', borderRadius: 10, color: '#aaa', fontWeight: 600, fontSize: 14, background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative' }}>
+            👥 Friends {receivedRequests.length > 0 && <span style={{ position: 'absolute', top: 2, right: 2, background: 'var(--red)', color: 'white', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{receivedRequests.length}</span>}
+          </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 20, padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>👤 {user.username}</div>
           <button onClick={logout} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '7px 14px', color: '#aaa', fontSize: 13, cursor: 'pointer' }}>Logout</button>
         </div>
       </nav>
+      
+      {/* Friends Modal */}
+      {friendsModal && (
+        <div onClick={() => setFriendsModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 500, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#16162a', border: '1px solid rgba(0,132,255,0.3)', borderRadius: 20, padding: 28, maxWidth: 500, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ color: 'var(--blue)', fontSize: 20 }}>👥 Friends</h3>
+              <button onClick={() => setFriendsModal(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, padding: '6px 12px', color: '#fff', cursor: 'pointer' }}>✕</button>
+            </div>
+            
+            {/* Search Users */}
+            <div style={{ marginBottom: 20 }}>
+              <input 
+                type="text" 
+                placeholder="Search players by username..." 
+                value={searchQuery}
+                onChange={e => { setSearchQuery(e.target.value); searchUsers(e.target.value); }}
+                style={{ width: '100%', padding: '12px 16px', background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: 12, color: '#fff', fontSize: 14, outline: 'none' }}
+              />
+              {searchResults.length > 0 && (
+                <div style={{ marginTop: 10, background: 'rgba(0,0,0,0.3)', borderRadius: 10, overflow: 'hidden' }}>
+                  {searchResults.map(u => (
+                    <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 15px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div>
+                        <div style={{ fontWeight: 700 }}>{u.username}</div>
+                        <div style={{ fontSize: 12, color: '#888' }}>{u.wins}W • {u.win_rate}% Win Rate</div>
+                      </div>
+                      <button onClick={() => sendFriendRequest(u.id, u.username)} style={{ background: 'var(--blue)', color: 'white', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>+ Add</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Received Requests */}
+            {receivedRequests.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#888' }}>📩 Friend Requests</div>
+                {receivedRequests.map(r => (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: 'rgba(255,204,0,0.1)', borderRadius: 10, marginBottom: 8 }}>
+                    <span style={{ fontWeight: 600 }}>{r.username}</span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => acceptFriendRequest(r.id)} style={{ background: 'var(--green)', color: 'white', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>Accept</button>
+                      <button onClick={() => rejectFriendRequest(r.id)} style={{ background: 'var(--red)', color: 'white', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>Reject</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Friends List */}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#888' }}>🤝 Your Friends ({friends.length})</div>
+              {friends.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 30, color: '#666' }}>No friends yet. Search and add players!</div>
+              ) : friends.map(f => (
+                <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: 10, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 20 }}>{f.is_online ? '🟢' : '⚫'}</span>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{f.username}</div>
+                      <div style={{ fontSize: 12, color: '#888' }}>{f.wins}W • {f.win_rate}%</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {roomCode && <button onClick={() => inviteFriend(f.id, f.username)} style={{ background: 'var(--green)', color: 'white', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 11 }}>Invite</button>}
+                    <button onClick={() => removeFriend(f.id)} style={{ background: 'rgba(255,59,59,0.2)', color: 'var(--red)', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 11 }}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <main style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px' }}>
         <div style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 28, fontWeight: 800 }}>Welcome back, <span style={{ color: 'var(--yellow)' }}>{user.username}</span>! 👋</h2>
+          <h2 style={{ fontSize: 28, fontWeight: 800 }} className="welcome-text">Welcome back, <span style={{ color: 'var(--yellow)' }}>{user.username}</span>! 👋</h2>
           <p style={{ color: '#888', marginTop: 6, fontSize: 15 }}>Ready for another round? Create or join a room below.</p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 32 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 32 }} className="stats-grid">
           {[
             { icon: '🏆', value: user.wins, label: 'Wins', color: 'var(--yellow)' },
             { icon: '🎮', value: user.games_played, label: 'Games Played', color: 'var(--blue)' },
@@ -105,7 +284,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }} className="dashboard-grid">
           <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 24 }}>
             <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 18 }}>🏆 Top Players</div>
             {leaderboard.length === 0 ? (

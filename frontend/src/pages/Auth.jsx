@@ -14,9 +14,13 @@ export default function Auth() {
   const [suConfirm, setSuConfirm] = useState('');
 
   useEffect(() => {
-    fetch('/api/auth/me').then(r => r.json()).then(d => {
-      if (d.success) navigate('/dashboard');
-    }).catch(() => {});
+    // Check if user is already logged in with persistent token
+    const token = localStorage.getItem('ludo_token');
+    if (token) {
+      fetch('/api/auth/me?token=' + encodeURIComponent(token)).then(r => r.json()).then(d => {
+        if (d.success) navigate('/dashboard');
+      }).catch(() => {});
+    }
   }, [navigate]);
 
   function switchTab(t) { setTab(t); setError(''); setSuccess(''); }
@@ -28,7 +32,14 @@ export default function Auth() {
     try {
       const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: siUsername, password: siPassword }) });
       const data = await res.json();
-      if (data.success) { setSuccess('Welcome back! Redirecting...'); setTimeout(() => navigate('/dashboard'), 800); }
+      if (data.success) { 
+        // Save token for persistent login
+        if (data.token) {
+          localStorage.setItem('ludo_token', data.token);
+        }
+        setSuccess('Welcome back! Redirecting...'); 
+        setTimeout(() => navigate('/dashboard'), 800); 
+      }
       else { setError(data.error || 'Sign in failed'); setLoading(false); }
     } catch { setError('Connection error. Please try again.'); setLoading(false); }
   }
@@ -42,20 +53,27 @@ export default function Auth() {
     try {
       const res = await fetch('/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: suUsername, password: suPassword }) });
       const data = await res.json();
-      if (data.success) { setSuccess('Account created! Redirecting...'); setTimeout(() => navigate('/dashboard'), 1000); }
+      if (data.success) { 
+        // Save token for persistent login
+        if (data.token) {
+          localStorage.setItem('ludo_token', data.token);
+        }
+        setSuccess('Account created! Redirecting...'); 
+        setTimeout(() => navigate('/dashboard'), 1000); 
+      }
       else { setError(data.error || 'Sign up failed'); setLoading(false); }
     } catch { setError('Connection error. Please try again.'); setLoading(false); }
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }} className="auth-container">
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <div style={{ fontSize: 28, marginBottom: 8 }}>🎲🎮🏆</div>
-        <h1 style={{ fontSize: 48, fontWeight: 900, letterSpacing: -1 }}>Ludo <span style={{ color: 'var(--yellow)' }}>Pro</span></h1>
+        <h1 style={{ fontSize: 48, fontWeight: 900, letterSpacing: -1 }} className="auth-title">Ludo <span style={{ color: 'var(--yellow)' }}>Pro</span></h1>
         <p style={{ color: '#aaa', marginTop: 8, fontSize: 15 }}>Multiplayer Ludo with Live Leaderboards & Stats</p>
       </div>
 
-      <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 20, padding: 36, width: '100%', maxWidth: 420, backdropFilter: 'blur(20px)', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+      <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 20, padding: 36, width: '100%', maxWidth: 420, backdropFilter: 'blur(20px)', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} className="auth-box">
         <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 4, marginBottom: 28 }}>
           {['signin', 'signup'].map(t => (
             <button key={t} onClick={() => switchTab(t)} style={{ flex: 1, padding: '10px', textAlign: 'center', borderRadius: 9, cursor: 'pointer', fontWeight: 700, fontSize: 15, border: 'none', background: tab === t ? 'var(--blue)' : 'transparent', color: tab === t ? '#fff' : '#aaa', boxShadow: tab === t ? '0 4px 12px rgba(0,132,255,0.4)' : 'none', transition: 'all 0.2s' }}>
