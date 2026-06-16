@@ -2,8 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { io } from 'socket.io-client';
 
-const colorHex = { blue: '#0084ff', red: '#ff3b3b', green: '#00b84c', yellow: '#ffcc00' };
-
 function authFetch(url, options = {}) {
   const token = localStorage.getItem('ludo_token');
   if (token) {
@@ -23,8 +21,9 @@ export default function Friends() {
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [socket, setSocket] = useState(null);
+  const [notifications, setNotifications] = useState([]);
   const chatEndRef = useRef(null);
-  let socket = null;
 
   useEffect(() => {
     async function init() {
@@ -36,35 +35,84 @@ export default function Friends() {
       }
       setUser(me.user);
       
-      // Connect to socket for real-time chat
-      socket = io("https://ludo-pro-max.onrender.com", {
-        transports: ["websocket", "polling"]
+      // Connect to socket
+      const newSocket = io("https://ludo-pro-max.onrender.com", {
+        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
       });
       
-      socket.on('connect', () => {
-        socket.emit('joinChat', { userId: me.user.id, username: me.user.username });
+      newSocket.on('connect', () => {
+        console.log('Socket connected');
+        newSocket.emit('joinChat', { userId: me.user.id, username: me.user.username });
       });
       
-      socket.on('newMessage', (data) => {
+      newSocket.on('newMessage', (data) => {
+        console.log('New message:', data);
+        
+        // If chat open with this friend, add message
         if (selectedChat && data.fromId === selectedChat.id) {
           setChatMessages(prev => [...prev, { from: data.from, fromId: data.fromId, message: data.message, time: data.time }]);
+        } else {
+          // Show notification
+          setNotifications(prev => [...prev, {
+            id: Date.now(),
+            fromId: data.fromId,
+            from: data.from,
+            message: data.message
+          }]);
         }
-        // Update friend list to show last message
+        
+        // Update friend list
         setFriends(prev => prev.map(f => 
           f.id === data.fromId ? { ...f, lastMessage: data.message, lastMessageTime: data.time, unread: f.id !== selectedChat?.id ? (f.unread || 0) + 1 : 0 } : f
         ));
       });
       
+      newSocket.on('inviteReceived', (data) => {
+        setNotifications(prev => [...prev, {
+          id: Date.now(),
+          type: 'invite',
+          fromName: data.fromName,
+          roomId: data.roomId
+        }]);
+      });
+      
+      setSocket(newSocket);
+      
       // Load friends
-      await loadFriends();
+      const friendsData = await authFetch('/api/friends').then(r => r.json());
+      if (friendsData.success) {
+        setFriends((friendsData.friends || []).map(f => ({ ...f, unread: 0, lastMessage: '', lastMessageTime: null })));
+        setReceivedRequests(friendsData.receivedRequests || []);
+      }
       setLoading(false);
     }
+    
     init();
     
     return () => {
-      if (socket) socket.disconnect();
+      if (socket) {
+        socket.emit('leaveChat', {});
+        socket.disconnect();
+      }
     };
-  }, [navigate]);
+  }, [navigate, selectedChat?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
 
   async function loadFriends() {
     const data = await authFetch('/api/friends').then(r => r.json());
@@ -94,7 +142,7 @@ export default function Friends() {
     }
   }
 
-  async function acceptFriendRequest(fromUserId) {
+  async function acceptFriendRequest(fromUserId, username) {
     const data = await authFetch('/api/friends/accept', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -102,7 +150,7 @@ export default function Friends() {
     }).then(r => r.json());
     if (data.success) {
       loadFriends();
-      alert('Friend added!');
+      alert(username + ' is now your friend!');
     }
   }
 
@@ -115,17 +163,6 @@ export default function Friends() {
     loadFriends();
   }
 
-  async function removeFriend(friendId) {
-    if (!confirm('Remove this friend?')) return;
-    await authFetch('/api/friends/remove', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ friendId })
-    });
-    loadFriends();
-    if (selectedChat?.id === friendId) setSelectedChat(null);
-  }
-
   async function selectFriend(friend) {
     setSelectedChat(friend);
     setChatMessages([]);
@@ -133,10 +170,7 @@ export default function Friends() {
     // Load chat history
     const data = await authFetch('/api/chat/history/' + friend.id).then(r => r.json()).catch(() => ({ success: true, messages: [] }));
     if (data.success && data.messages) {
-      // Filter messages older than 10 minutes
-      const tenMinAgo = Date.now() - 600000;
-      const recentMessages = data.messages.filter(m => m.time > tenMinAgo);
-      setChatMessages(recentMessages);
+      setChatMessages(data.messages);
     }
     
     // Mark as read
@@ -144,9 +178,9 @@ export default function Friends() {
   }
 
   async function sendMessage() {
-    if (!newMessage.trim() || !selectedChat || !socket) return;
+    if (!newMessage.trim() || !selectedChat) return;
     
-    const msg = {
+    const msgData = {
       toId: selectedChat.id,
       toUsername: selectedChat.username,
       from: user.username,
@@ -155,14 +189,34 @@ export default function Friends() {
       time: Date.now()
     };
     
-    socket.emit('sendMessage', msg);
-    setChatMessages(prev => [...prev, { ...msg, sent: true }]);
+    // Add to local state immediately
+    setChatMessages(prev => [...prev, { ...msgData }]);
     setNewMessage('');
+    
+    // Send via socket
+    if (socket) {
+      socket.emit('sendMessage', msgData);
+    }
+    
+    // Also save via API
+    await authFetch('/api/chat/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msgData)
+    });
     
     // Update friend last message
     setFriends(prev => prev.map(f => 
-      f.id === selectedChat.id ? { ...f, lastMessage: msg.message, lastMessageTime: msg.time } : f
+      f.id === selectedChat.id ? { ...f, lastMessage: msgData.message, lastMessageTime: msgData.time } : f
     ));
+  }
+
+  function inviteToGame(friend) {
+    navigate('/dashboard', { state: { inviteFriend: friend } });
+  }
+
+  function acceptInvite(roomId) {
+    navigate('/game?room=' + encodeURIComponent(roomId));
   }
 
   function formatTime(timestamp) {
@@ -177,11 +231,6 @@ export default function Friends() {
     return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
   }
 
-  function inviteToGame(friend) {
-    navigate('/dashboard');
-    // Will be handled in dashboard
-  }
-
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0b141a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8696a0' }}>
       Loading...
@@ -189,23 +238,53 @@ export default function Friends() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0b141a', color: '#e9edef', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', background: '#0b141a', color: '#e9edef', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      
+      {/* Notifications Toast */}
+      {notifications.length > 0 && (
+        <div style={{ position: 'fixed', top: 70, right: 16, zIndex: 2000, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 300 }}>
+          {notifications.map((notif, i) => (
+            <div key={notif.id || i} style={{ background: '#1f2c33', borderRadius: 8, padding: '12px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+              {notif.type === 'invite' ? (
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>🎮 {notif.fromName} invited you!</div>
+                  <div>
+                    <button onClick={() => acceptInvite(notif.roomId)} style={{ background: '#00b84c', color: 'white', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginRight: 6 }}>Join</button>
+                    <button onClick={() => setNotifications(prev => prev.filter(n => n.id !== notif.id))} style={{ background: '#333', color: '#ccc', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>Dismiss</button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontWeight: 600 }}>💬 {notif.from}</div>
+                  <div style={{ color: '#8696a0', fontSize: 14, marginTop: 2 }}>{notif.message}</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Header */}
       <header style={{ background: '#1f2c33', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid #222d34' }}>
-        <Link to="/dashboard" style={{ color: '#8696a0', fontSize: 20 }}>←</Link>
+        <Link to="/dashboard" style={{ color: '#8696a0', fontSize: 20, textDecoration: 'none' }}>←</Link>
         <div style={{ fontSize: 18, fontWeight: 600, flex: 1 }}>👥 Friends</div>
-        <Link to="/dashboard" style={{ background: '#00b84c', color: 'white', padding: '8px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600 }}>🎮 Play</Link>
+        {notifications.length > 0 && (
+          <div style={{ background: '#ff3b3b', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
+            {notifications.length}
+          </div>
+        )}
+        <Link to="/dashboard" style={{ background: '#00b84c', color: 'white', padding: '8px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>🎮 Play</Link>
       </header>
 
       {/* Friend Requests Banner */}
       {receivedRequests.length > 0 && (
         <div style={{ background: '#1f2c33', padding: '12px 16px', borderBottom: '1px solid #222d34' }}>
           <div style={{ fontSize: 14, color: '#8696a0', marginBottom: 8 }}>📩 Friend Requests ({receivedRequests.length})</div>
-          {receivedRequests.slice(0, 2).map(r => (
+          {receivedRequests.map(r => (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
               <span style={{ fontWeight: 500 }}>{r.username}</span>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => acceptFriendRequest(r.id)} style={{ background: '#00b84c', color: 'white', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>Accept</button>
+                <button onClick={() => acceptFriendRequest(r.id, r.username)} style={{ background: '#00b84c', color: 'white', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>Accept</button>
                 <button onClick={() => rejectFriendRequest(r.id)} style={{ background: '#333', color: '#ccc', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>Reject</button>
               </div>
             </div>
@@ -228,7 +307,7 @@ export default function Friends() {
               <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid #222d34' }}>
                 <div>
                   <div style={{ fontWeight: 500 }}>{u.username}</div>
-                  <div style={{ fontSize: 12, color: '#8696a0' }}>{u.wins}W • {u.win_rate}% Win Rate</div>
+                  <div style={{ fontSize: 12, color: '#8696a0' }}>{u.wins}W • {u.win_rate}%</div>
                 </div>
                 <button onClick={() => sendFriendRequest(u.id, u.username)} style={{ background: '#0084ff', color: 'white', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>+ Add</button>
               </div>
@@ -239,7 +318,7 @@ export default function Friends() {
 
       {/* Friends List */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        <div style={{ padding: '8px 16px', fontSize: 13, color: '#8696a0', fontWeight: 500 }}>ALL FRIENDS</div>
+        <div style={{ padding: '8px 16px', fontSize: 13, color: '#8696a0', fontWeight: 500 }}>ALL FRIENDS ({friends.length})</div>
         {friends.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: '#8696a0' }}>
             No friends yet. Search and add players!
@@ -274,7 +353,7 @@ export default function Friends() {
                     {friend.lastMessage || (friend.is_online ? '🟢 Online' : '⚫ Offline')}
                   </span>
                   {friend.unread > 0 && (
-                    <span style={{ background: '#00b84c', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600 }}>
+                    <span style={{ background: '#00b84c', color: 'white', borderRadius: '50%', minWidth: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, padding: '0 6px' }}>
                       {friend.unread}
                     </span>
                   )}
@@ -290,7 +369,7 @@ export default function Friends() {
         <div style={{ position: 'fixed', inset: 0, background: '#0b141a', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
           {/* Chat Header */}
           <div style={{ background: '#1f2c33', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #222d34' }}>
-            <button onClick={() => setSelectedChat(null)} style={{ background: 'none', border: 'none', color: '#8696a0', fontSize: 20, cursor: 'pointer' }}>←</button>
+            <button onClick={() => setSelectedChat(null)} style={{ background: 'none', border: 'none', color: '#8696a0', fontSize: 20, cursor: 'pointer', padding: 0 }}>←</button>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#0084ff,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>
               {selectedChat.username.charAt(0).toUpperCase()}
             </div>
@@ -342,7 +421,13 @@ export default function Friends() {
               onKeyDown={e => e.key === 'Enter' && sendMessage()}
               style={{ flex: 1, padding: '10px 16px', background: '#2a3942', border: 'none', borderRadius: 8, color: '#fff', fontSize: 15, outline: 'none' }}
             />
-            <button onClick={sendMessage} style={{ background: '#00b84c', color: 'white', border: 'none', borderRadius: 8, padding: '10px 18px', cursor: 'pointer', fontSize: 15, fontWeight: 600 }}>Send</button>
+            <button 
+              onClick={sendMessage}
+              disabled={!newMessage.trim()}
+              style={{ background: newMessage.trim() ? '#00b84c' : '#333', color: 'white', border: 'none', borderRadius: 8, padding: '10px 18px', cursor: newMessage.trim() ? 'pointer' : 'default', fontSize: 15, fontWeight: 600 }}
+            >
+              Send
+            </button>
           </div>
         </div>
       )}

@@ -535,7 +535,7 @@ app.post('/api/invite', async (req, res) => {
 // Pending invites storage
 const pendingInvites = {};
 
-// ── CHAT HISTORY (in-memory, auto-deletes after 10 minutes) ─────────────────
+// ── FRIEND CHAT (in-memory, auto-deletes after 10 minutes) ─────────────────
 const chatMessages = {}; // key: "userId1_userId2" (sorted), value: [{from, fromId, message, time}]
 
 function getChatKey(id1, id2) {
@@ -565,6 +565,34 @@ app.get('/api/chat/history/:friendId', async (req, res) => {
     }
     
     res.json({ success: true, messages: chatMessages[key] || [] });
+});
+
+app.post('/api/chat/send', async (req, res) => {
+    let userId = req.session.userId;
+    if (!userId) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            userId = authTokens[token];
+        }
+    }
+    if (!userId) return res.status(401).json({ error: 'Not logged in' });
+    
+    const { toId, from, fromId, message, time } = req.body;
+    if (!toId || !message) return res.json({ success: false, error: 'Missing data' });
+    
+    const key = getChatKey(userId, toId);
+    if (!chatMessages[key]) chatMessages[key] = [];
+    
+    const msgData = { from, fromId: parseInt(fromId) || userId, message, time: time || Date.now() };
+    chatMessages[key].push(msgData);
+    
+    // Keep only last 100 messages
+    if (chatMessages[key].length > 100) {
+        chatMessages[key] = chatMessages[key].slice(-100);
+    }
+    
+    res.json({ success: true });
 });
 
 // ── SOCKET.IO GAME ───────────────────────────────────────────────────────────
