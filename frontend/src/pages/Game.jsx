@@ -17,8 +17,11 @@ export default function Game() {
     const homePaths = { red:[[8,2],[8,3],[8,4],[8,5],[8,6],[8,7]], green:[[2,8],[3,8],[4,8],[5,8],[6,8],[7,8]], yellow:[[8,14],[8,13],[8,12],[8,11],[8,10],[8,9]], blue:[[14,8],[13,8],[12,8],[11,8],[10,8],[9,8]] };
     const colorOffsets = { red: 0, green: 13, yellow: 26, blue: 39 };
 
-    let socket = io("https://ludo-pro-max.onrender.com", {
-        transports: ["websocket", "polling"]
+    let socket = io({
+        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000
     });
     
     let myRoomId = '', myColor = '', myName = '', isHost = false, wasHost = false;

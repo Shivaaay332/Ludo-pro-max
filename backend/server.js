@@ -229,11 +229,19 @@ app.get('/api/leaderboard', async (req, res) => {
 });
 
 app.get('/api/dashboard', async (req, res) => {
-    if (!req.session.userId) return res.status(401).json({ error: 'Not logged in' });
+    let userId = req.session.userId;
+    if (!userId) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            userId = authTokens[token];
+        }
+    }
+    if (!userId) return res.status(401).json({ success: false, error: 'Not logged in' });
     try {
         const userResult = await pool.query(
             'SELECT username, wins, games_played, kills, created_at FROM users WHERE id = $1',
-            [req.session.userId]
+            [userId]
         );
         const lbResult = await pool.query(`
             SELECT username, wins, games_played, kills,
@@ -248,7 +256,7 @@ app.get('/api/dashboard', async (req, res) => {
             WHERE gr.user_id = $1
             ORDER BY gs.played_at DESC
             LIMIT 5
-        `, [req.session.userId]);
+        `, [userId]);
 
         res.json({
             success: true,
@@ -262,11 +270,19 @@ app.get('/api/dashboard', async (req, res) => {
 });
 
 app.get('/api/profile', async (req, res) => {
-    if (!req.session.userId) return res.status(401).json({ error: 'Not logged in' });
+    let userId = req.session.userId;
+    if (!userId) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            userId = authTokens[token];
+        }
+    }
+    if (!userId) return res.status(401).json({ success: false, error: 'Not logged in' });
     try {
         const userResult = await pool.query(
             'SELECT username, wins, games_played, kills, created_at FROM users WHERE id = $1',
-            [req.session.userId]
+            [userId]
         );
         const historyResult = await pool.query(`
             SELECT gr.color, gr.rank, gr.kills, gs.played_at, gs.total_players
@@ -275,13 +291,13 @@ app.get('/api/profile', async (req, res) => {
             WHERE gr.user_id = $1
             ORDER BY gs.played_at DESC
             LIMIT 20
-        `, [req.session.userId]);
+        `, [userId]);
 
         const rankCounts = await pool.query(`
             SELECT rank, COUNT(*) as count
             FROM game_results WHERE user_id = $1
             GROUP BY rank ORDER BY rank
-        `, [req.session.userId]);
+        `, [userId]);
 
         res.json({
             success: true,
@@ -289,6 +305,33 @@ app.get('/api/profile', async (req, res) => {
             history: historyResult.rows,
             rankCounts: rankCounts.rows
         });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Change password
+app.post('/api/auth/change-password', async (req, res) => {
+    let userId = req.session.userId;
+    if (!userId) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            userId = authTokens[token];
+        }
+    }
+    if (!userId) return res.status(401).json({ success: false, error: 'Not logged in' });
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) return res.json({ success: false, error: 'Both fields required' });
+    if (newPassword.length < 6) return res.json({ success: false, error: 'Password must be 6+ characters' });
+    try {
+        const result = await pool.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+        if (result.rows.length === 0) return res.json({ success: false, error: 'User not found' });
+        const match = await bcrypt.compare(oldPassword, result.rows[0].password_hash);
+        if (!match) return res.json({ success: false, error: 'Current password is incorrect' });
+        const newHash = await bcrypt.hash(newPassword, 10);
+        await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHash, userId]);
+        res.json({ success: true });
     } catch (err) {
         res.json({ success: false, error: err.message });
     }
@@ -633,6 +676,8 @@ io.on('connection', (socket) => {
         for (let i = 0; i < room.players.length; i++) {
             if (room.players[i].userId === userId) {
                 playerInfo = room.players[i];
+                // Fix host rejoin: check BEFORE updating socket id, then update room.host if needed
+                if (room.host === playerInfo.id) room.host = socket.id;
                 room.players[i].id = socket.id;
                 room.players[i].online = true;
                 break;
@@ -920,9 +965,11 @@ io.on('connection', (socket) => {
     socket.on('joinChat', (data) => {
         socket.userId = data.userId;
         socket.username = data.username;
-        // Store online status
+        // Store online status in DB
         pool.query('INSERT INTO online_users (user_id, socket_id) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET socket_id = $2, last_seen = NOW()', [data.userId, socket.id])
             .catch(() => {});
+        // Notify all connected sockets that this user is online
+        io.emit('friendOnline', { userId: data.userId });
     });
 
     socket.on('sendMessage', (data) => {
@@ -953,45 +1000,74 @@ io.on('connection', (socket) => {
         });
     });
 
+    socket.on('leaveChat', () => {
+        if (socket.userId) {
+            pool.query('DELETE FROM online_users WHERE user_id = $1 AND socket_id = $2', [socket.userId, socket.id]).catch(() => {});
+        }
+    });
+
+    socket.on('inviteFriend', (data) => {
+        const { friendId, roomId, fromName } = data;
+        const friendSocket = Array.from(io.sockets.sockets.values()).find(s => s.userId == friendId);
+        if (friendSocket) {
+            friendSocket.emit('inviteReceived', { fromName, roomId });
+        }
+    });
+
     socket.on('disconnect', () => {
+        // Clean up friend chat online status
+        if (socket.userId) {
+            pool.query('DELETE FROM online_users WHERE user_id = $1 AND socket_id = $2', [socket.userId, socket.id]).catch(() => {});
+            // Notify friends that this user is offline
+            io.emit('friendOffline', { userId: socket.userId });
+        }
+
         for (let roomId in rooms) {
             let room = rooms[roomId];
             if (room.pendingRequests && room.pendingRequests[socket.id]) delete room.pendingRequests[socket.id];
             let pIndex = room.players.findIndex(p => p.id === socket.id);
             if (pIndex !== -1) {
+                const disconnectedColor = room.players[pIndex].color;
+                const disconnectedName = room.players[pIndex].name;
                 room.players[pIndex].online = false;
-                io.to(roomId).emit('playerStatus', { color: room.players[pIndex].color, status: 'offline', name: room.players[pIndex].name });
-                io.to(roomId).emit('playerDisconnected', { color: room.players[pIndex].color, name: room.players[pIndex].name });
-                
-                // Keep room active for 5 minutes for rejoin (only during waiting or early game)
-                if (room.status === 'waiting' || room.activeColors.length <= 2) {
-                    // Room stays active for rejoin
-                    if (room.players.every(p => !p.online)) {
-                        // Set timeout to delete room after 5 minutes if no one rejoins
-                        setTimeout(() => {
-                            let r = rooms[roomId];
-                            if (r && r.players.every(p => !p.online)) {
-                                delete rooms[roomId];
-                                delete roomChats[roomId];
+                io.to(roomId).emit('playerStatus', { color: disconnectedColor, status: 'offline', name: disconnectedName });
+                io.to(roomId).emit('playerDisconnected', { color: disconnectedColor, name: disconnectedName });
+
+                // Auto-pass turn if it's the disconnected player's turn
+                if (room.status === 'playing' && room.turnColor === disconnectedColor) {
+                    const capturedRoomId = roomId;
+                    const capturedColor = disconnectedColor;
+                    setTimeout(() => {
+                        const r = rooms[capturedRoomId];
+                        if (r && r.status === 'playing' && r.turnColor === capturedColor) {
+                            const stillOffline = r.players.find(p => p.color === capturedColor && !p.online);
+                            if (stillOffline && r.activeColors.length > 1) {
+                                const idx = r.activeColors.indexOf(r.turnColor);
+                                r.turnColor = r.activeColors[(idx + 1) % r.activeColors.length];
+                                io.to(capturedRoomId).emit('turnChanged', { color: r.turnColor, reason: 'auto' });
                             }
-                        }, 300000); // 5 minutes
-                    }
-                } else {
-                    // Game in progress with many players - auto host transfer
-                    if (room.players.every(p => !p.online)) {
-                        delete rooms[roomId];
-                        delete roomChats[roomId];
-                    } else if (room.host === socket.id) {
-                        let newHost = room.players.find(p => p.online);
-                        if (newHost) { room.host = newHost.id; io.to(roomId).emit('updatePlayers', { players: room.players, hostId: room.host }); }
+                        }
+                    }, 10000); // 10s grace period to reconnect
+                }
+                
+                // Keep room active for rejoin
+                if (room.players.every(p => !p.online)) {
+                    setTimeout(() => {
+                        const r = rooms[roomId];
+                        if (r && r.players.every(p => !p.online)) {
+                            delete rooms[roomId];
+                            delete roomChats[roomId];
+                        }
+                    }, 300000); // 5 minutes
+                } else if (room.host === socket.id) {
+                    // Transfer host to next online player
+                    const newHost = room.players.find(p => p.online);
+                    if (newHost) {
+                        room.host = newHost.id;
+                        io.to(roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
                     }
                 }
             }
-        }
-        
-        // Clean up userRooms mapping
-        for (let uid in userRooms) {
-            // This is simplified - in production you'd track socket -> userId mapping
         }
     });
 });

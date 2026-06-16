@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Profile from './pages/Profile.jsx';
 import Game from './pages/Game.jsx';
 import Friends from './pages/Friends.jsx';
+import Settings from './pages/Settings.jsx';
 import InstallPrompt from './components/InstallPrompt.jsx';
 
 function ProtectedRoute({ children }) {
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/game" element={<ProtectedRoute><Game /></ProtectedRoute>} />
         <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
