@@ -535,6 +535,38 @@ app.post('/api/invite', async (req, res) => {
 // Pending invites storage
 const pendingInvites = {};
 
+// ── CHAT HISTORY (in-memory, auto-deletes after 10 minutes) ─────────────────
+const chatMessages = {}; // key: "userId1_userId2" (sorted), value: [{from, fromId, message, time}]
+
+function getChatKey(id1, id2) {
+    return [id1, id2].sort().join('_');
+}
+
+app.get('/api/chat/history/:friendId', async (req, res) => {
+    let userId = req.session.userId;
+    if (!userId) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            userId = authTokens[token];
+        }
+    }
+    if (!userId) return res.status(401).json({ error: 'Not logged in' });
+    
+    const friendId = parseInt(req.params.friendId);
+    if (!friendId) return res.json({ success: true, messages: [] });
+    
+    const key = getChatKey(userId, friendId);
+    const tenMinAgo = Date.now() - 600000;
+    
+    // Clean old messages
+    if (chatMessages[key]) {
+        chatMessages[key] = chatMessages[key].filter(m => m.time > tenMinAgo);
+    }
+    
+    res.json({ success: true, messages: chatMessages[key] || [] });
+});
+
 // ── SOCKET.IO GAME ───────────────────────────────────────────────────────────
 const rooms = {};
 const assignmentOrder = ['blue', 'green', 'red', 'yellow'];
@@ -832,6 +864,65 @@ io.on('connection', (socket) => {
     });
 
     socket.on('sendInteraction', (data) => { io.to(data.roomId).emit('showInteraction', { color: data.color, type: data.type, content: data.content }); });
+
+    // Handle leave room
+    socket.on('leaveRoom', (data) => {
+        let room = rooms[data.roomId];
+        if (room) {
+            let pIndex = room.players.findIndex(p => p.id === socket.id);
+            if (pIndex !== -1) {
+                let playerName = room.players[pIndex].name;
+                room.players.splice(pIndex, 1);
+                room.activeColors = room.activeColors.filter(c => c !== playerName);
+                socket.leave(data.roomId);
+                io.to(data.roomId).emit('playerLeft', { name: playerName });
+                io.to(data.roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
+                
+                // Transfer host if needed
+                if (room.host === socket.id && room.players.length > 0) {
+                    room.host = room.players[0].id;
+                    io.to(data.roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
+                }
+            }
+        }
+    });
+
+    // Friend chat handlers
+    socket.on('joinChat', (data) => {
+        socket.userId = data.userId;
+        socket.username = data.username;
+        // Store online status
+        pool.query('INSERT INTO online_users (user_id, socket_id) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET socket_id = $2, last_seen = NOW()', [data.userId, socket.id])
+            .catch(() => {});
+    });
+
+    socket.on('sendMessage', (data) => {
+        // Store message
+        const key = getChatKey(data.fromId, data.toId);
+        if (!chatMessages[key]) chatMessages[key] = [];
+        chatMessages[key].push({ from: data.from, fromId: data.fromId, message: data.message, time: data.time });
+        // Keep only last 100 messages
+        if (chatMessages[key].length > 100) chatMessages[key] = chatMessages[key].slice(-100);
+        
+        // Find recipient's socket
+        const recipientSocket = Array.from(io.sockets.sockets.values()).find(s => s.userId === data.toId);
+        if (recipientSocket) {
+            recipientSocket.emit('newMessage', {
+                from: data.from,
+                fromId: data.fromId,
+                message: data.message,
+                time: data.time
+            });
+        }
+        // Also send back to sender
+        socket.emit('newMessage', {
+            from: data.from,
+            fromId: data.fromId,
+            message: data.message,
+            time: data.time,
+            sent: true
+        });
+    });
 
     socket.on('disconnect', () => {
         for (let roomId in rooms) {

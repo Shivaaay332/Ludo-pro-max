@@ -637,7 +637,7 @@ export default function Game() {
           <div className="go-actions">
             <button className="go-btn go-btn-dash" onClick={() => window.location.href = '/dashboard'}>🏠 Dashboard</button>
             <button className="go-btn go-btn-restart" id="goRestartBtn" style={{ background: 'linear-gradient(135deg,#0084ff,#5b21b6)', color: 'white' }} onClick={() => window.__restartGame && window.__restartGame()}>↻ Play Again</button>
-            <button className="go-btn go-btn-close" onClick={() => { const m = document.getElementById('gameOverModal'); if (m) m.style.display = 'none'; }}>✕ Exit</button>
+            <button className="go-btn go-btn-close" onClick={() => { const m = document.getElementById('gameOverModal'); if (m) m.style.display = 'none'; if(socket) socket.emit('leaveRoom', {roomId: myRoomId}); socket.disconnect(); localStorage.removeItem('lastRoomId'); window.location.href = '/dashboard'; }}>✕ Exit & Go Home</button>
           </div>
         </div>
       </div>
@@ -652,7 +652,7 @@ export default function Game() {
           <div id="roomCodeDisplay" style={{ fontWeight: 'bold', color: 'var(--yellow)', fontSize: 13 }}>Room: ---</div>
           <button id="adminBtn" className="btn-green" style={{ padding: '4px 8px', fontSize: 12, width: 'auto', display: 'none' }} onClick={() => { const m = document.getElementById('adminModal'); if (m) m.style.display = 'flex'; }}>⚙️</button>
           <button id="restartBtn" className="btn-red" style={{ padding: '4px 8px', fontSize: 12, width: 'auto', display: 'none' }} onClick={() => window.__restartGame && window.__restartGame()}>↻</button>
-          <button id="exitBtn" className="btn-exit" style={{ padding: '4px 10px', fontSize: 12, width: 'auto', background: 'var(--red)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }} onClick={() => { if(confirm('Exit game and leave room?')) { socket.disconnect(); window.location.href = '/dashboard'; } }}>🚪 Exit</button>
+          <button id="exitBtn" style={{ padding: '4px 10px', fontSize: 12, width: 'auto', background: 'var(--red)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }} onClick={() => { if(confirm('Exit game and leave room?')) { if(socket) socket.emit('leaveRoom', {roomId: myRoomId}); socket.disconnect(); localStorage.removeItem('lastRoomId'); window.location.href = '/dashboard'; } }}>🚪 Exit</button>
         </div>
       </header>
 
@@ -792,15 +792,12 @@ const gameStyles = `
   .score-toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(0,180,0,0.92); color:white; padding:10px 20px; border-radius:20px; font-weight:bold; z-index:5000; opacity:0; transition:opacity 0.4s; pointer-events:none; white-space:nowrap; font-size:14px; }
   .score-toast.show { opacity:1; }
   
-  /* Mobile Responsive */
+  /* Mobile Responsive - Keep original layout, just adjust sizes */
   @media (max-width: 600px) {
-    .game-wrapper { width: 95vw !important; height: 95vw !important; }
-    .header { padding: 8px 10px !important; }
     .status-text { font-size: 13px !important; padding: 6px 10px !important; }
-    .btn-interact { width: 36px !important; height: 36px !important; font-size: 16px !important; }
     .go-box { padding: 20px !important; }
     .go-btn { padding: 10px !important; font-size: 13px !important; }
-    .chat-panel { width: 100% !important; height: 50vh !important; bottom: 0 !important; right: 0 !important; border-radius: 20px 20px 0 0 !important; }
+    .chat-panel { width: 95% !important; height: 60vh !important; bottom: 10px !important; right: 2.5% !important; }
   }
   
   /* Chat Panel Styles */
