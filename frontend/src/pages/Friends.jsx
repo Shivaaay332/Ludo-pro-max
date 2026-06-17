@@ -36,7 +36,8 @@ export default function Friends() {
       setUser(me.user);
       userRef.current = me.user;
 
-      const sock = io({ transports: ['websocket', 'polling'], reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+      const sock = io(BACKEND_URL, { transports: ['websocket', 'polling'], reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
       socketRef.current = sock;
 
       sock.on('connect', () => {

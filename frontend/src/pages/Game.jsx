@@ -17,7 +17,8 @@ export default function Game() {
     const homePaths = { red:[[8,2],[8,3],[8,4],[8,5],[8,6],[8,7]], green:[[2,8],[3,8],[4,8],[5,8],[6,8],[7,8]], yellow:[[8,14],[8,13],[8,12],[8,11],[8,10],[8,9]], blue:[[14,8],[13,8],[12,8],[11,8],[10,8],[9,8]] };
     const colorOffsets = { red: 0, green: 13, yellow: 26, blue: 39 };
 
-    let socket = io({
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+    let socket = io(BACKEND_URL, {
         transports: ["websocket", "polling"],
         reconnection: true,
         reconnectionAttempts: 10,
@@ -174,10 +175,6 @@ export default function Game() {
       myRoomId=inputCode;
       socket.emit('joinRoom',{id:myRoomId,name:inputName,userId:currentUser?.id});
       
-      // Show share section
-      if($('shareSection'))$('shareSection').style.display='block';
-      const shareLink = window.location.origin + '/game?room=' + encodeURIComponent(inputCode);
-      if($('shareLinkInput'))$('shareLinkInput').value=shareLink;
     }
     window.__joinRoom = joinRoom;
 
@@ -235,10 +232,6 @@ export default function Game() {
       if($('myColorDisp'))$('myColorDisp').innerHTML=`You: <b style="color:var(--${myColor})">${myName} (${myColor.toUpperCase()})</b>`;
       const gw=$('gameWrapper');if(gw)gw.style.setProperty('--board-rot',colorRotations[myColor]);
       
-      // Show share section
-      if($('shareSection'))$('shareSection').style.display='block';
-      const shareLink = window.location.origin + '/game?room=' + encodeURIComponent(data.roomId);
-      if($('shareLinkInput'))$('shareLinkInput').value=shareLink;
     });
 
     socket.on('rejoined',(data)=>{
@@ -632,14 +625,6 @@ export default function Game() {
             <div id="adminPlayerList" style={{ textAlign: 'left', marginBottom: 10 }}></div>
           </div>
 
-          {/* Share Room Section */}
-          <div id="shareSection" style={{ marginTop: 20, display: 'none' }}>
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>📤 Share Room Link</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input type="text" id="shareLinkInput" readOnly style={{ flex: 1, padding: '10px', fontSize: 12, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff' }} />
-              <button id="copyLinkBtn" onClick={() => { const link = document.getElementById('shareLinkInput').value; navigator.clipboard.writeText(link); showToast('Link copied!'); }} style={{ padding: '10px 15px', background: 'var(--green)', border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>📋</button>
-            </div>
-          </div>
         </div>
         <button className="btn-back" onClick={() => window.location.href = '/dashboard'} style={{ width: '90%', maxWidth: 400, background: 'rgba(255,255,255,0.08)' }}>← Back to Dashboard</button>
       </div>
