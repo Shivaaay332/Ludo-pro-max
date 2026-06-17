@@ -345,7 +345,7 @@ export default function Game() {
       });
       
       // Update lobby's host controls
-      const lobbyAdminList = $('adminPlayerList');
+      const lobbyAdminList = $('lobbyAdminListEl');
       const lobbyHostControls = $('hostControls');
       if(lobbyAdminList) lobbyAdminList.innerHTML=adminText;
       if(lobbyHostControls) lobbyHostControls.style.display = (isHost && data.players.length > 0) ? 'block' : 'none';
@@ -622,7 +622,7 @@ export default function Game() {
           {/* Host Controls - Kick Players */}
           <div id="hostControls" style={{ marginTop: 15, display: 'none' }}>
             <div style={{ fontSize: 12, color: '#888', marginBottom: 8, textAlign: 'left' }}>⚙️ Host Controls</div>
-            <div id="adminPlayerList" style={{ textAlign: 'left', marginBottom: 10 }}></div>
+            <div id="lobbyAdminListEl" style={{ textAlign: 'left', marginBottom: 10 }}></div>
           </div>
 
         </div>

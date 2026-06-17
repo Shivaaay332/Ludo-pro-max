@@ -348,7 +348,7 @@ export default function Friends() {
               </div>
             ) : (
               chatMessages.map((msg, i) => {
-                const isMine = msg.fromId === user?.id;
+                const isMine = msg.fromId == user?.id;
                 return (
                   <div key={i} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', marginBottom: 6 }}>
                     <div style={{ maxWidth: '78%', padding: '8px 12px', borderRadius: isMine ? '12px 12px 4px 12px' : '12px 12px 12px 4px', background: isMine ? '#005c4b' : '#1f2c33', color: '#e9edef', fontSize: 14 }}>
@@ -367,6 +367,7 @@ export default function Friends() {
               type="text" placeholder="Message..." value={newMessage}
               onChange={e => setNewMessage(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendMessage()}
+              autoFocus
               style={{ flex: 1, padding: '10px 14px', background: '#2a3942', border: 'none', borderRadius: 22, color: '#fff', fontSize: 15, outline: 'none', WebkitUserSelect: 'text', userSelect: 'text' }}
             />
             <button onClick={sendMessage} disabled={!newMessage.trim()}
