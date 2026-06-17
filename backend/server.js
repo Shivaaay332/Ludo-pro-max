@@ -580,10 +580,15 @@ app.post('/api/invite', async (req, res) => {
 const pendingInvites = {};
 
 // ── FRIEND CHAT (in-memory, auto-deletes after 10 minutes) ─────────────────
-const chatMessages = {}; // key: "userId1_userId2" (sorted), value: [{from, fromId, message, time}]
+const chatMessages = {}; // key: "userId1_userId2" (sorted), value: [{msgId,from,fromId,message,time,replyTo,reactions,deletedFor,deleted,edited,status}]
+const userLastSeen = {}; // userId -> timestamp (null if online)
 
 function getChatKey(id1, id2) {
     return [id1, id2].sort().join('_');
+}
+
+function findSocket(toId) {
+    return Array.from(io.sockets.sockets.values()).find(s => s.userId != null && s.userId == toId);
 }
 
 app.get('/api/chat/history/:friendId', async (req, res) => {
@@ -601,14 +606,20 @@ app.get('/api/chat/history/:friendId', async (req, res) => {
     if (!friendId) return res.json({ success: true, messages: [] });
     
     const key = getChatKey(userId, friendId);
-    const tenMinAgo = Date.now() - 600000;
+    const oneDayAgo = Date.now() - 86400000;
     
-    // Clean old messages
+    // Clean very old messages (older than 24h)
     if (chatMessages[key]) {
-        chatMessages[key] = chatMessages[key].filter(m => m.time > tenMinAgo);
+        chatMessages[key] = chatMessages[key].filter(m => m.time > oneDayAgo);
     }
     
-    res.json({ success: true, messages: chatMessages[key] || [] });
+    // Filter messages deleted for this user
+    const msgs = (chatMessages[key] || []).filter(m => {
+        if (!m.deletedFor) return true;
+        return !m.deletedFor.includes(String(userId));
+    });
+    
+    res.json({ success: true, messages: msgs });
 });
 
 app.post('/api/chat/send', async (req, res) => {
@@ -622,13 +633,19 @@ app.post('/api/chat/send', async (req, res) => {
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
     
-    const { toId, from, fromId, message, time } = req.body;
+    const { toId, from, fromId, message, time, msgId, replyTo } = req.body;
     if (!toId || !message) return res.json({ success: false, error: 'Missing data' });
     
     const key = getChatKey(userId, toId);
     if (!chatMessages[key]) chatMessages[key] = [];
     
-    const msgData = { from, fromId: parseInt(fromId) || userId, message, time: time || Date.now() };
+    // Check for duplicate msgId (socket already stored it)
+    const existingMsgId = msgId || null;
+    if (existingMsgId && chatMessages[key].some(m => m.msgId === existingMsgId)) {
+        return res.json({ success: true }); // Already stored via socket
+    }
+    
+    const msgData = { msgId: existingMsgId || `msg_${Date.now()}_${Math.random().toString(36).substr(2,6)}`, from, fromId: parseInt(fromId) || userId, message, time: time || Date.now(), replyTo: replyTo || null, reactions: {}, deletedFor: [], status: 'sent' };
     chatMessages[key].push(msgData);
     
     // Keep only last 100 messages
@@ -862,7 +879,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('startGame', (roomId) => {
+    socket.on('startGame', (rawData) => {
+        const roomId = typeof rawData === 'string' ? rawData : rawData?.roomId;
+        const mode = (typeof rawData === 'object' && rawData?.mode) ? rawData.mode : 'normal';
         let room = rooms[roomId];
         if (room && room.host === socket.id && room.players.length > 0) {
             room.status = 'playing';
@@ -870,11 +889,20 @@ io.on('connection', (socket) => {
             room.activeColors.sort((a, b) => turnOrder.indexOf(a) - turnOrder.indexOf(b));
             room.turnColor = room.activeColors[0];
             room.kills = {};
+            room.mode = mode;
+            room.teams = null;
+            // 2v2: needs exactly 4 players — team A: positions 0,2 | team B: positions 1,3
+            if (mode === '2v2' && room.activeColors.length === 4) {
+                room.teams = {
+                    A: [room.activeColors[0], room.activeColors[2]],
+                    B: [room.activeColors[1], room.activeColors[3]]
+                };
+            }
             room.activeColors.forEach(c => {
                 room.rollStats[c] = { count: 0, target: Math.floor(Math.random() * 3) + 4 };
                 room.kills[c] = 0;
             });
-            io.to(roomId).emit('gameStarted', { activeColors: room.activeColors, turnColor: room.turnColor });
+            io.to(roomId).emit('gameStarted', { activeColors: room.activeColors, turnColor: room.turnColor, mode: room.mode, teams: room.teams });
         }
     });
 
@@ -986,6 +1014,7 @@ io.on('connection', (socket) => {
     socket.on('joinChat', (data) => {
         socket.userId = data.userId;
         socket.username = data.username;
+        userLastSeen[data.userId] = null; // Now online
         // Store online status in DB
         pool.query('INSERT INTO online_users (user_id, socket_id) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET socket_id = $2, last_seen = NOW()', [data.userId, socket.id])
             .catch(() => {});
@@ -994,31 +1023,119 @@ io.on('connection', (socket) => {
     });
 
     socket.on('sendMessage', (data) => {
-        // Store message
+        const msgId = data.msgId || `msg_${Date.now()}_${Math.random().toString(36).substr(2,6)}`;
         const key = getChatKey(data.fromId, data.toId);
         if (!chatMessages[key]) chatMessages[key] = [];
-        chatMessages[key].push({ from: data.from, fromId: data.fromId, message: data.message, time: data.time });
-        // Keep only last 100 messages
-        if (chatMessages[key].length > 100) chatMessages[key] = chatMessages[key].slice(-100);
-        
-        // Find recipient's socket and deliver in real-time
-        // Use == (loose) to handle number/string type mismatches from JSON serialization
-        const recipientSocket = Array.from(io.sockets.sockets.values()).find(s => s.userId != null && s.userId == data.toId);
-        if (recipientSocket) {
-            recipientSocket.emit('newMessage', {
-                from: data.from,
-                fromId: data.fromId,
-                message: data.message,
-                time: data.time
-            });
+        // Avoid duplicate if HTTP already stored it
+        if (!chatMessages[key].some(m => m.msgId === msgId)) {
+            const msg = { msgId, from: data.from, fromId: data.fromId, message: data.message, time: data.time || Date.now(), replyTo: data.replyTo || null, reactions: {}, deletedFor: [], status: 'sent' };
+            chatMessages[key].push(msg);
+            if (chatMessages[key].length > 200) chatMessages[key] = chatMessages[key].slice(-200);
         }
-        // NOTE: Do NOT echo back to sender — the client adds message optimistically already
+        const stored = chatMessages[key].find(m => m.msgId === msgId);
+        // Deliver to recipient
+        const recipSock = findSocket(data.toId);
+        if (recipSock) {
+            if (stored) stored.status = 'delivered';
+            recipSock.emit('newMessage', { ...(stored || { msgId, from: data.from, fromId: data.fromId, message: data.message, time: data.time, replyTo: data.replyTo || null, reactions: {}, deletedFor: [] }), status: 'delivered' });
+            socket.emit('messageStatus', { msgId, status: 'delivered' });
+        } else {
+            socket.emit('messageStatus', { msgId, status: 'sent' });
+        }
     });
 
     socket.on('leaveChat', () => {
         if (socket.userId) {
             pool.query('DELETE FROM online_users WHERE user_id = $1 AND socket_id = $2', [socket.userId, socket.id]).catch(() => {});
         }
+    });
+
+    // ── Typing indicators ─────────────────────────────────────────────────────
+    socket.on('typing', (data) => {
+        const r = findSocket(data.toId);
+        if (r) r.emit('typing', { fromId: data.fromId, from: data.from });
+    });
+    socket.on('stopTyping', (data) => {
+        const r = findSocket(data.toId);
+        if (r) r.emit('stopTyping', { fromId: data.fromId });
+    });
+
+    // ── Message seen ──────────────────────────────────────────────────────────
+    socket.on('messageSeen', (data) => {
+        const key = getChatKey(data.viewerId, data.senderId);
+        if (chatMessages[key]) {
+            chatMessages[key].forEach(m => { if (m.fromId == data.senderId) m.status = 'seen'; });
+        }
+        const senderSock = findSocket(data.senderId);
+        if (senderSock) senderSock.emit('messagesSeen', { byId: data.viewerId });
+    });
+
+    // ── Delete message ────────────────────────────────────────────────────────
+    socket.on('deleteMessage', (data) => {
+        const key = getChatKey(data.fromId, data.toId);
+        if (!chatMessages[key]) return;
+        const msg = chatMessages[key].find(m => m.msgId === data.msgId);
+        if (!msg) return;
+        if (data.forEveryone && msg.fromId == data.fromId) {
+            msg.message = 'This message was deleted'; msg.deleted = true;
+            const r = findSocket(data.toId);
+            if (r) r.emit('messageDeleted', { msgId: data.msgId, forEveryone: true });
+            socket.emit('messageDeleted', { msgId: data.msgId, forEveryone: true });
+        } else {
+            if (!msg.deletedFor) msg.deletedFor = [];
+            const uid = String(data.fromId);
+            if (!msg.deletedFor.includes(uid)) msg.deletedFor.push(uid);
+            socket.emit('messageDeleted', { msgId: data.msgId, forEveryone: false });
+        }
+    });
+
+    // ── Edit message ──────────────────────────────────────────────────────────
+    socket.on('editMessage', (data) => {
+        const key = getChatKey(data.fromId, data.toId);
+        if (!chatMessages[key]) return;
+        const msg = chatMessages[key].find(m => m.msgId === data.msgId && m.fromId == data.fromId);
+        if (!msg || msg.deleted) return;
+        msg.message = data.newText; msg.edited = true;
+        const r = findSocket(data.toId);
+        if (r) r.emit('messageEdited', { msgId: data.msgId, newText: data.newText });
+        socket.emit('messageEdited', { msgId: data.msgId, newText: data.newText });
+    });
+
+    // ── Emoji reactions ───────────────────────────────────────────────────────
+    socket.on('reactToMessage', (data) => {
+        const key = getChatKey(data.fromId, data.toId);
+        if (!chatMessages[key]) return;
+        const msg = chatMessages[key].find(m => m.msgId === data.msgId);
+        if (!msg) return;
+        if (!msg.reactions) msg.reactions = {};
+        const uid = String(data.fromId);
+        // Remove existing reaction by this user (toggle)
+        Object.keys(msg.reactions).forEach(e => {
+            msg.reactions[e] = msg.reactions[e].filter(id => String(id) !== uid);
+            if (msg.reactions[e].length === 0) delete msg.reactions[e];
+        });
+        // Add new reaction
+        if (data.emoji) {
+            if (!msg.reactions[data.emoji]) msg.reactions[data.emoji] = [];
+            msg.reactions[data.emoji].push(uid);
+        }
+        const payload = { msgId: data.msgId, reactions: msg.reactions };
+        const r = findSocket(data.toId);
+        if (r) r.emit('messageReacted', payload);
+        socket.emit('messageReacted', payload);
+    });
+
+    // ── Clear chat ────────────────────────────────────────────────────────────
+    socket.on('clearChat', (data) => {
+        const key = getChatKey(data.userId, data.friendId);
+        if (chatMessages[key]) {
+            const uid = String(data.userId);
+            chatMessages[key].forEach(m => {
+                if (!m.deletedFor) m.deletedFor = [];
+                if (!m.deletedFor.includes(uid)) m.deletedFor.push(uid);
+            });
+        }
+        socket.emit('chatCleared', { friendId: data.friendId });
     });
 
     socket.on('inviteFriend', (data) => {
@@ -1032,9 +1149,11 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         // Clean up friend chat online status
         if (socket.userId) {
+            const lastSeenTs = Date.now();
+            userLastSeen[socket.userId] = lastSeenTs;
             pool.query('DELETE FROM online_users WHERE user_id = $1 AND socket_id = $2', [socket.userId, socket.id]).catch(() => {});
-            // Notify friends that this user is offline
-            io.emit('friendOffline', { userId: socket.userId });
+            // Notify friends that this user is offline, include last seen time
+            io.emit('friendOffline', { userId: socket.userId, lastSeen: lastSeenTs });
         }
 
         for (let roomId in rooms) {

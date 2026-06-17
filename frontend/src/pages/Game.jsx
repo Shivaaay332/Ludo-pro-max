@@ -29,6 +29,8 @@ export default function Game() {
     let winnersRanking = [], roomPlayersInfo = [], pendingJoinReqId = null;
     let soundEnabled = true, fireworksInterval = null, gameResultReported = false;
     let activeColors = [];
+    let teamMode = false; // 2v2 toggle
+    let gameTeams = null; // { A: [color1,color2], B: [color3,color4] }
     let gameState = { red:[-1,-1,-1,-1], green:[-1,-1,-1,-1], yellow:[-1,-1,-1,-1], blue:[-1,-1,-1,-1] };
     let currentTurnColor = '', currentRoll = 0, hasRolled = false, isAnimating = false, isRequestingRoll = false;
     let cells = {};
@@ -412,12 +414,22 @@ export default function Game() {
     });
 
     // ── START GAME FIX ───────────────────────────────────────────────────────
+    function toggleTeamMode(){
+      teamMode = !teamMode;
+      const btn = $('teamModeBtn');
+      if(btn){
+        btn.innerText = teamMode ? '👥 2v2 Mode: ON' : '👥 2v2 Mode: OFF';
+        btn.style.background = teamMode ? 'var(--green)' : 'rgba(255,255,255,0.08)';
+        btn.style.color = teamMode ? '#fff' : '#aaa';
+      }
+    }
+    window.__toggleTeamMode = toggleTeamMode;
+
     function startGame(){
       const btn = document.getElementById('startBtn');
       if(btn) btn.innerText = "Starting...";
-      
       const safeRoomId = myRoomId || document.getElementById('roomIdInput')?.value?.trim();
-      socket.emit('startGame', safeRoomId);
+      socket.emit('startGame', { roomId: safeRoomId, mode: teamMode ? '2v2' : 'normal' });
     }
     window.__startGame = startGame;
 
@@ -432,6 +444,15 @@ export default function Game() {
         if(isHost&&$('restartBtn'))$('restartBtn').style.display='block';
         clearInterval(fireworksInterval);
         activeColors=data.activeColors;currentTurnColor=data.turnColor;winnersRanking=[];gameResultReported=false;
+        gameTeams=data.teams||null;
+        // Show team banner if 2v2
+        if(gameTeams && $('teamBanner')){
+          const myTeamKey=Object.keys(gameTeams).find(k=>gameTeams[k].includes(myColor));
+          const partnerColor=myTeamKey?gameTeams[myTeamKey].find(c=>c!==myColor):null;
+          const partnerName=partnerColor?roomPlayersInfo.find(p=>p.color===partnerColor)?.name||partnerColor:'?';
+          $('teamBanner').innerHTML=`🤝 2v2 Mode — Team ${myTeamKey||'?'}: <b style="color:var(--${myColor})">${myName}</b> + <b style="color:var(--${partnerColor||'white'})">${partnerName}</b>`;
+          $('teamBanner').style.display='block';
+        }
         gameState={red:[-1,-1,-1,-1],green:[-1,-1,-1,-1],yellow:[-1,-1,-1,-1],blue:[-1,-1,-1,-1]};
         buildActiveBases();currentRoll=0;hasRolled=false;isAnimating=false;isRequestingRoll=false;updateTurnStatus();
       } catch (e) {
@@ -619,10 +640,15 @@ export default function Game() {
           <button id="startBtn" className="btn-green" onClick={() => window.__startGame && window.__startGame()}>▶ Start Game</button>
           <button id="restartLobbyBtn" className="btn-red" style={{ display: 'none', marginTop: 10 }} onClick={() => window.__restartGame && window.__restartGame()}>↻ Restart Game</button>
 
-          {/* Host Controls - Kick Players */}
+          {/* Host Controls - Kick Players + 2v2 Toggle */}
           <div id="hostControls" style={{ marginTop: 15, display: 'none' }}>
             <div style={{ fontSize: 12, color: '#888', marginBottom: 8, textAlign: 'left' }}>⚙️ Host Controls</div>
             <div id="lobbyAdminListEl" style={{ textAlign: 'left', marginBottom: 10 }}></div>
+            <button id="teamModeBtn" onClick={() => window.__toggleTeamMode && window.__toggleTeamMode()}
+              style={{ width: '100%', padding: '9px 14px', marginTop: 6, background: 'rgba(255,255,255,0.08)', color: '#aaa', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: '0.2s' }}>
+              👥 2v2 Mode: OFF
+            </button>
+            <div style={{ fontSize: 10, color: '#666', marginTop: 4, textAlign: 'center' }}>Requires exactly 4 players</div>
           </div>
 
         </div>
@@ -687,6 +713,9 @@ export default function Game() {
           </div>
         </div>
       </div>
+
+      {/* Team Banner for 2v2 mode */}
+      <div id="teamBanner" style={{ display: 'none', background: 'linear-gradient(90deg,#1a3a2a,#1a2a3a)', color: '#e9edef', textAlign: 'center', padding: '6px 14px', fontSize: 13, borderBottom: '1px solid #2a3942' }}></div>
 
       <header>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
