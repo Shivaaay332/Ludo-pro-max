@@ -206,6 +206,15 @@ export default function Game() {
       }
     }
 
+    // On socket reconnect (after network drop), re-join the room to refresh socket.id on server
+    socket.on('connect', () => {
+      if (myRoomId) {
+        // Socket reconnected with a new socket.id — update server with new id
+        const name = myName || $('playerNameInput')?.value?.trim() || currentUser?.username || 'Player';
+        socket.emit('joinRoom', { id: myRoomId, name, userId: currentUser?.id });
+      }
+    });
+
     socket.on('errorMsg',(msg)=>{
       alert(msg);
       if($('playerNameInput'))$('playerNameInput').style.display='block';

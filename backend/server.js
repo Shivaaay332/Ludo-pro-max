@@ -716,12 +716,33 @@ io.on('connection', (socket) => {
             roomChats[roomId] = [];
         }
         let room = rooms[roomId];
+
+        // ── Reconnect: same socket.id already in room ──
         if (room.players.some(p => p.id === socket.id)) {
             let pIndex = room.players.findIndex(p => p.id === socket.id);
             socket.emit('joined', { color: room.players[pIndex].color, roomId, isHost: room.host === socket.id, name: room.players[pIndex].name });
             io.to(roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
             return;
         }
+
+        // ── Reconnect: same userId but new socket.id (socket dropped and reconnected) ──
+        if (userId) {
+            let existingIdx = room.players.findIndex(p => p.userId == userId);
+            if (existingIdx !== -1) {
+                const existing = room.players[existingIdx];
+                // Update host reference if this player was the host
+                if (room.host === existing.id) room.host = socket.id;
+                existing.id = socket.id;
+                existing.online = true;
+                if (userId) userRooms[userId] = roomId;
+                socket.join(roomId);
+                socket.emit('joined', { color: existing.color, roomId, isHost: room.host === socket.id, name: existing.name });
+                io.to(roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
+                if (roomChats[roomId]) socket.emit('chatHistory', { messages: roomChats[roomId].slice(-50) });
+                return;
+            }
+        }
+
         let availableColors = assignmentOrder.filter(c => !room.players.some(p => p.color === c));
         if (availableColors.length === 0) return socket.emit('errorMsg', 'Room is full!');
         if (room.status === 'playing') {
@@ -980,8 +1001,9 @@ io.on('connection', (socket) => {
         // Keep only last 100 messages
         if (chatMessages[key].length > 100) chatMessages[key] = chatMessages[key].slice(-100);
         
-        // Find recipient's socket
-        const recipientSocket = Array.from(io.sockets.sockets.values()).find(s => s.userId === data.toId);
+        // Find recipient's socket and deliver in real-time
+        // Use == (loose) to handle number/string type mismatches from JSON serialization
+        const recipientSocket = Array.from(io.sockets.sockets.values()).find(s => s.userId != null && s.userId == data.toId);
         if (recipientSocket) {
             recipientSocket.emit('newMessage', {
                 from: data.from,
@@ -990,14 +1012,7 @@ io.on('connection', (socket) => {
                 time: data.time
             });
         }
-        // Also send back to sender
-        socket.emit('newMessage', {
-            from: data.from,
-            fromId: data.fromId,
-            message: data.message,
-            time: data.time,
-            sent: true
-        });
+        // NOTE: Do NOT echo back to sender — the client adds message optimistically already
     });
 
     socket.on('leaveChat', () => {
