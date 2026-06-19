@@ -5,6 +5,15 @@ import { io } from 'socket.io-client';
 export default function Game() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isSpectator = searchParams.get('spectate') === 'true';
+
+  // PREMIUM ANIMATED STICKERS (3D Fluent Emojis)
+  const animatedEmotes = [
+    { id: 'laugh', src: 'https://cdn.jsdelivr.net/gh/Tarikul-Islam-Anik/Animated-Fluent-Emojis/Emojis/Smilies/Face%20with%20Tears%20of%20Joy.png' },
+    { id: 'cry', src: 'https://cdn.jsdelivr.net/gh/Tarikul-Islam-Anik/Animated-Fluent-Emojis/Emojis/Smilies/Loudly%20Crying%20Face.png' },
+    { id: 'party', src: 'https://cdn.jsdelivr.net/gh/Tarikul-Islam-Anik/Animated-Fluent-Emojis/Emojis/Smilies/Partying%20Face.png' },
+    { id: 'thumbsup', src: 'https://cdn.jsdelivr.net/gh/Tarikul-Islam-Anik/Animated-Fluent-Emojis/Emojis/Hand%20gestures/Thumbs%20Up.png' }
+  ];
 
   useEffect(() => {
     const roomParam = searchParams.get('room') || '';
@@ -29,8 +38,8 @@ export default function Game() {
     let winnersRanking = [], roomPlayersInfo = [], pendingJoinReqId = null;
     let soundEnabled = true, fireworksInterval = null, gameResultReported = false;
     let activeColors = [];
-    let teamMode = false; // 2v2 toggle
-    let gameTeams = null; // { A: [color1,color2], B: [color3,color4] }
+    let teamMode = false; 
+    let gameTeams = null; 
     let gameState = { red:[-1,-1,-1,-1], green:[-1,-1,-1,-1], yellow:[-1,-1,-1,-1], blue:[-1,-1,-1,-1] };
     let currentTurnColor = '', currentRoll = 0, hasRolled = false, isAnimating = false, isRequestingRoll = false;
     let cells = {};
@@ -93,10 +102,37 @@ export default function Game() {
     }
     window.__sendInteract = sendInteract;
 
+    // FLOATING STICKERS & CHAT BUBBLES
     socket.on('showInteraction',(data)=>{
       const base=$(`base-${data.color}`);
-      if(base){const el=document.createElement('div');el.className=data.type==='emoji'?'floating-anim float-emoji':'floating-anim float-chat';el.innerText=data.content;base.appendChild(el);setTimeout(()=>el.remove(),3000);}
+      if(base){
+        const el=document.createElement('div');
+        if (data.type === 'emoji') {
+          el.className = 'floating-anim float-sticker';
+          el.innerHTML = `<img src="${data.content}" alt="sticker" />`;
+        } else {
+          el.className = 'floating-anim float-chat';
+          el.innerText = data.content;
+        }
+        base.appendChild(el);
+        setTimeout(()=>el.remove(),3000);
+      }
     });
+
+    function showFloatingChat(color, message) {
+      const base = $(`base-${color}`);
+      if (base) {
+        const el = document.createElement('div');
+        el.className = 'floating-chat-bubble';
+        el.innerText = message;
+        base.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity = '0';
+          el.style.transform = 'translateY(-20px) scale(0.8) rotate(calc(var(--board-rot,0deg)*-1))';
+          setTimeout(() => el.remove(), 300);
+        }, 3500);
+      }
+    }
 
     // ── FIREWORKS ────────────────────────────────────────────────────────────
     function launchFireworks(colorHex) {
@@ -176,18 +212,15 @@ export default function Game() {
       if($('lobbyStatus'))$('lobbyStatus').innerHTML='Connecting...';
       myRoomId=inputCode;
       socket.emit('joinRoom',{id:myRoomId,name:inputName,userId:currentUser?.id});
-      
     }
     window.__joinRoom = joinRoom;
 
-    // Rejoin functionality
     function attemptRejoin() {
       if (!reconnectRoomId || !currentUser?.id) return;
       socket.emit('rejoinRoom', { roomId: reconnectRoomId, userId: currentUser.id });
     }
     window.__attemptRejoin = attemptRejoin;
     
-    // Leave from rejoin modal
     function leaveFromRejoin() {
       reconnectRoomId = null;
       localStorage.removeItem('lastRoomId');
@@ -196,19 +229,15 @@ export default function Game() {
     }
     window.__leaveFromRejoin = leaveFromRejoin;
 
-    // Check for stored room ID on page load
     if (roomParam) {
       const storedRoom = localStorage.getItem('lastRoomId');
       if (storedRoom && storedRoom !== roomParam) {
-        // User has previous room, show rejoin option
         reconnectRoomId = storedRoom;
       }
     }
 
-    // On socket reconnect (after network drop), re-join the room to refresh socket.id on server
     socket.on('connect', () => {
       if (myRoomId) {
-        // Socket reconnected with a new socket.id — update server with new id
         const name = myName || $('playerNameInput')?.value?.trim() || currentUser?.username || 'Player';
         socket.emit('joinRoom', { id: myRoomId, name, userId: currentUser?.id });
       }
@@ -233,7 +262,6 @@ export default function Game() {
       if($('roomCodeDisplay'))$('roomCodeDisplay').innerText=`Room: ${data.roomId}`;
       if($('myColorDisp'))$('myColorDisp').innerHTML=`You: <b style="color:var(--${myColor})">${myName} (${myColor.toUpperCase()})</b>`;
       const gw=$('gameWrapper');if(gw)gw.style.setProperty('--board-rot',colorRotations[myColor]);
-      
     });
 
     socket.on('rejoined',(data)=>{
@@ -244,8 +272,6 @@ export default function Game() {
       if($('roomCodeDisplay'))$('roomCodeDisplay').innerText=`Room: ${data.roomId}`;
       if($('myColorDisp'))$('myColorDisp').innerHTML=`You: <b style="color:var(--${myColor})">${myName} (${myColor.toUpperCase()})</b>`;
       const gw=$('gameWrapper');if(gw)gw.style.setProperty('--board-rot',colorRotations[myColor]);
-      
-      // If game is in progress, restore state
       if(data.gameState) {
         activeColors = data.gameState.activeColors;
         currentTurnColor = data.gameState.turnColor;
@@ -254,18 +280,11 @@ export default function Game() {
         render();
         updateTurnStatus();
       }
-      
       showToast('🔄 Reconnected!');
     });
 
-    // Player disconnected/reconnected
-    socket.on('playerDisconnected',(data)=>{
-      showToast(`${data.name} disconnected`);
-    });
-    
-    socket.on('playerRejoined',(data)=>{
-      showToast(`${data.name} reconnected!`);
-    });
+    socket.on('playerDisconnected',(data)=>{ showToast(`${data.name} disconnected`); });
+    socket.on('playerRejoined',(data)=>{ showToast(`${data.name} reconnected!`); });
 
     // Game invite
     socket.on('gameInvite',(data)=>{
@@ -278,19 +297,15 @@ export default function Game() {
       window.__acceptInvite = function() {
         const room = window.__inviteRoom;
         if($('inviteModal'))$('inviteModal').style.display='none';
-        if(room) {
-          navigate('/game?room=' + encodeURIComponent(room));
-        }
+        if(room) { navigate('/game?room=' + encodeURIComponent(room)); }
       };
     }
     
     if(typeof window.__declineInvite === 'undefined') {
-      window.__declineInvite = function() {
-        if($('inviteModal'))$('inviteModal').style.display='none';
-      };
+      window.__declineInvite = function() { if($('inviteModal'))$('inviteModal').style.display='none'; };
     }
 
-    // In-game chat
+    // ── IN-GAME CHAT ────────────────────────────────────────────────────────
     function sendChatMsg() {
       const input = $('chatInput');
       if(!input || !input.value.trim()) return;
@@ -309,6 +324,8 @@ export default function Game() {
     
     socket.on('newChat', (data) => {
       addChatMessage(data);
+      // SHOW FLOATING BUBBLE OVER PLAYER AVATAR
+      showFloatingChat(data.color, data.message);
     });
     
     function addChatMessage(data) {
@@ -322,7 +339,6 @@ export default function Game() {
       container.scrollTop = container.scrollHeight;
     }
 
-    // Setup chat button to open panel
     const originalToggleMenu = toggleMenu;
     toggleMenu = function(id) {
       originalToggleMenu(id);
@@ -346,13 +362,11 @@ export default function Game() {
         const dot=$(`status-${p.color}`);if(dot){if(p.online)dot.classList.remove('offline');else dot.classList.add('offline');}
       });
       
-      // Update lobby's host controls
       const lobbyAdminList = $('lobbyAdminListEl');
       const lobbyHostControls = $('hostControls');
       if(lobbyAdminList) lobbyAdminList.innerHTML=adminText;
       if(lobbyHostControls) lobbyHostControls.style.display = (isHost && data.players.length > 0) ? 'block' : 'none';
       
-      // Update in-game admin modal
       const gameAdminList = $('adminPlayerList');
       if(gameAdminList) gameAdminList.innerHTML=adminText;
       
@@ -413,7 +427,6 @@ export default function Game() {
       buildActiveBases();render();updateTurnStatus();
     });
 
-    // ── START GAME FIX ───────────────────────────────────────────────────────
     function toggleTeamMode(){
       teamMode = !teamMode;
       const btn = $('teamModeBtn');
@@ -445,7 +458,6 @@ export default function Game() {
         clearInterval(fireworksInterval);
         activeColors=data.activeColors;currentTurnColor=data.turnColor;winnersRanking=[];gameResultReported=false;
         gameTeams=data.teams||null;
-        // Show team banner if 2v2
         if(gameTeams && $('teamBanner')){
           const myTeamKey=Object.keys(gameTeams).find(k=>gameTeams[k].includes(myColor));
           const partnerColor=myTeamKey?gameTeams[myTeamKey].find(c=>c!==myColor):null;
@@ -472,6 +484,12 @@ export default function Game() {
 
     // ── DICE & MOVES ─────────────────────────────────────────────────────────
     function requestDiceRoll(color){
+      // 👉 Yeh 4 lines add karni hain
+      if(isSpectator) {
+        showToast('👁️ You are only spectating!');
+        return;
+      }
+
       if(currentTurnColor!==color||myColor!==color||isAnimating||hasRolled||isRequestingRoll||winnersRanking.includes(color))return;
       isRequestingRoll=true;socket.emit('rollDice',{roomId:myRoomId,color});
       setTimeout(()=>{if(isRequestingRoll)isRequestingRoll=false;},2000);
@@ -479,7 +497,6 @@ export default function Game() {
     window.__rollDice = requestDiceRoll;
 
     socket.on('diceRolled',(data)=>{
-      // Clear any previous turn timeout
       if(window.__turnTimeout){clearTimeout(window.__turnTimeout);window.__turnTimeout=null;}
       isRequestingRoll=false;isAnimating=true;playSound('dice');
       const d=$(`dice-${data.color}`);if(d)d.classList.add('rolling');
@@ -490,11 +507,8 @@ export default function Game() {
       const playable=[];
       gameState[color].forEach((pos,i)=>{if((pos===-1&&currentRoll===6)||(pos!==-1&&pos+currentRoll<=56)){playable.push(i);if(color===myColor){const t=$(`t_${color}_${i}`);if(t)t.classList.add('highlight');}}});
       if(color===myColor){
-        // Auto-pass if no moves available
         if(playable.length===0)setTimeout(()=>socket.emit('passTurn',{roomId:myRoomId}),800);
-        // Auto-move if only one option
         else if(playable.length===1)setTimeout(()=>requestTokenMove(color,playable[0]),400);
-        // Auto-pass after 15 seconds if no move selected
         else {
           window.__turnTimeout = setTimeout(() => {
             if(myColor === color && hasRolled) {
@@ -507,8 +521,10 @@ export default function Game() {
     }
 
     function requestTokenMove(color,idx){
+      // 👉 Yeh 1 line add karni hai
+      if(isSpectator) return;
+
       if(currentTurnColor!==color||myColor!==color||!hasRolled||isAnimating)return;
-      // Clear auto-pass timeout
       if(window.__turnTimeout){clearTimeout(window.__turnTimeout);window.__turnTimeout=null;}
       const pos=gameState[color][idx];
       if(pos===-1&&currentRoll!==6)return;if(pos!==-1&&pos+currentRoll>56)return;
@@ -606,7 +622,6 @@ export default function Game() {
 
     initEmptyBoard();
 
-    // Setup rejoin modal button handlers
     setTimeout(() => {
       const rejoinBtn = document.getElementById('rejoinBtn');
       const leaveBtn = document.getElementById('leaveBtn');
@@ -614,13 +629,12 @@ export default function Game() {
       if (leaveBtn) leaveBtn.addEventListener('click', () => window.__leaveFromRejoin && window.__leaveFromRejoin());
     }, 100);
 
-    // FIXED CLEANUP: Isme se window. delete command hata di gayi hain, taaki start button hamesha chalta rahe!
     return () => {
       socket.disconnect();
       clearInterval(fireworksInterval);
       document.body.removeEventListener('click', handleAudioInit);
     };
-  }, [searchParams]);
+  }, [searchParams, isSpectator]);
 
   return (
     <>
@@ -754,8 +768,13 @@ export default function Game() {
             <div id="myColorDisp"></div>
           </div>
           <div style={{ display: 'flex', gap: 10, position: 'relative' }}>
-            <div className="interaction-menu" id="emojiMenu">
-              {['😂','😡','😭','🥳','👍'].map(em => <div key={em} className="interact-item" onClick={() => window.__sendInteract && window.__sendInteract('emoji', em)}>{em}</div>)}
+            <div className="interaction-menu" id="emojiMenu" style={{ padding: '12px', gap: '15px' }}>
+              {/* RENDER ANIMATED STICKERS */}
+              {animatedEmotes.map(em => (
+                <div key={em.id} className="interact-item" onClick={() => window.__sendInteract && window.__sendInteract('emoji', em.src)}>
+                  <img src={em.src} alt={em.id} style={{ width: 45, height: 45, filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }} />
+                </div>
+              ))}
             </div>
             <div className="interaction-menu chat-menu" id="chatMenu">
               {['Jaldi chal bhai! ⏳','Kya kismat hai! 😲','Arre yaar! 🤦‍♂️','Bhai maar mat! 🙏'].map(msg => <div key={msg} className="interact-item chat-item" onClick={() => window.__sendInteract && window.__sendInteract('chat', msg)}>{msg}</div>)}
@@ -843,11 +862,15 @@ const gameStyles = `
   .btn-interact { background:#24243e; border:2px solid var(--blue); color:white; border-radius:50%; width:36px; height:36px; font-size:16px; display:flex; justify-content:center; align-items:center; cursor:pointer; box-shadow:0 3px 8px rgba(0,0,0,0.3); transition:0.2s; flex-shrink:0; }
   .interaction-menu { display:none; position:absolute; bottom:50px; right:0; background:rgba(0,0,0,0.85); border-radius:10px; padding:8px; gap:8px; flex-direction:row; border:1px solid #555; z-index:1000; box-shadow:0 5px 15px rgba(0,0,0,0.5); }
   .chat-menu { flex-direction:column; width:max-content; right:40px; }
-  .interact-item { font-size:20px; cursor:pointer; }
+  .interact-item { cursor:pointer; display:flex; align-items:center; justify-content:center; transition: transform 0.2s; }
+  .interact-item:active { transform: scale(0.8); }
   .chat-item { font-size:13px; font-weight:bold; padding:6px 10px; background:rgba(255,255,255,0.1); border-radius:6px; color:white; }
   .floating-anim { position:absolute; z-index:500; pointer-events:none; animation:floatUp 3s ease-out forwards; transform:rotate(calc(var(--board-rot,0deg)*-1)); }
-  .float-emoji { font-size:36px; }
+  .float-sticker { font-size:36px; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.6)); }
   .float-chat { font-size:12px; font-weight:bold; background:white; color:black; padding:4px 8px; border-radius:10px; box-shadow:0 3px 8px rgba(0,0,0,0.3); white-space:nowrap; border:2px solid #222; }
+  .floating-chat-bubble { position:absolute; z-index:501; pointer-events:none; background:rgba(255,255,255,0.95); color:#000; padding:6px 12px; border-radius:14px; font-weight:800; font-size:12px; border:2px solid #0084ff; box-shadow:0 4px 15px rgba(0,0,0,0.4); transform:rotate(calc(var(--board-rot,0deg)*-1)); top:-30px; left:-20px; white-space:nowrap; animation: bubblePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; transition: all 0.3s ease; }
+  .floating-chat-bubble::after { content:''; position:absolute; bottom:-6px; left:15px; border-width:6px 6px 0; border-style:solid; border-color:#0084ff transparent transparent; display:block; width:0; }
+  @keyframes bubblePop { 0% { opacity:0; transform: translateY(10px) scale(0.5) rotate(calc(var(--board-rot,0deg)*-1)); } 100% { opacity:1; transform: translateY(0) scale(1) rotate(calc(var(--board-rot,0deg)*-1)); } }
   @keyframes floatUp { 0%{opacity:0;margin-top:0;transform:scale(0.5) rotate(calc(var(--board-rot,0deg)*-1));} 15%{opacity:1;transform:scale(1.1) rotate(calc(var(--board-rot,0deg)*-1));} 85%{opacity:1;transform:scale(1) rotate(calc(var(--board-rot,0deg)*-1));} 100%{opacity:0;margin-top:-50px;transform:scale(1) rotate(calc(var(--board-rot,0deg)*-1));} }
   .go-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:2500; justify-content:center; align-items:center; padding:15px; }
   .go-box { background:#1a1a2e; border:2px solid gold; border-radius:16px; padding:20px; width:100%; max-width:340px; max-height:85vh; overflow-y:auto; }

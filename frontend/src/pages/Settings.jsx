@@ -18,6 +18,11 @@ export default function Settings() {
   const [pwOld, setPwOld] = useState('');
   const [pwNew, setPwNew] = useState('');
   const [pwMsg, setPwMsg] = useState('');
+  
+  // Privacy & Block States
+  const [showBlocked, setShowBlocked] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,6 +60,23 @@ export default function Settings() {
     }).then(r => r.json());
     setPwMsg(data.success ? '✅ Password changed!' : (data.error || 'Failed'));
     if (data.success) { setPwOld(''); setPwNew(''); setShowPwForm(false); }
+  }
+
+  async function loadBlockedUsers() {
+    const data = await authFetch('/api/friends/blocked').then(r => r.json()).catch(() => ({}));
+    if (data.success) setBlockedUsers(data.blocked || []);
+    setShowBlocked(!showBlocked);
+  }
+
+  async function unblockUser(blockedId) {
+    const data = await authFetch('/api/friends/unblock', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blockedId })
+    }).then(r => r.json()).catch(() => ({}));
+    
+    if (data.success) {
+      setBlockedUsers(prev => prev.filter(u => u.id !== blockedId));
+    }
   }
 
   async function logout() {
@@ -122,6 +144,32 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Privacy & Blocking (NEW SECTION) */}
+        <div style={{ fontSize: 11, color: '#555', fontWeight: 700, letterSpacing: 1, padding: '8px 4px 4px', textTransform: 'uppercase' }}>🛡️ Privacy</div>
+        <div style={card}>
+          <div style={{ ...row, cursor: 'pointer' }} onClick={loadBlockedUsers}>
+            <div>
+              <div style={label}>🚫 Blocked Users</div>
+              <div style={sub}>Manage your blocked list</div>
+            </div>
+            <div style={{ color: '#555', fontSize: 16 }}>{showBlocked ? '▲' : '▶'}</div>
+          </div>
+          {showBlocked && (
+            <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {blockedUsers.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#666', textAlign: 'center', padding: '10px 0' }}>No blocked users.</div>
+              ) : (
+                blockedUsers.map(u => (
+                  <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '10px 12px', borderRadius: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>{u.username}</span>
+                    <button onClick={() => unblockUser(u.id)} style={{ background: 'rgba(0, 184, 76, 0.2)', border: '1px solid rgba(0, 184, 76, 0.4)', color: '#00b84c', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Unblock</button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Theme */}
         <div style={{ fontSize: 11, color: '#555', fontWeight: 700, letterSpacing: 1, padding: '8px 4px 4px', textTransform: 'uppercase' }}>Appearance</div>
         <div style={card}>
@@ -180,18 +228,6 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* App Info */}
-        <div style={{ fontSize: 11, color: '#555', fontWeight: 700, letterSpacing: 1, padding: '8px 4px 4px', textTransform: 'uppercase' }}>About</div>
-        <div style={card}>
-          <div style={{ ...row }}>
-            <div style={label}>📱 App Version</div>
-            <div style={{ fontSize: 12, color: '#555' }}>Ludo Pro v2.0</div>
-          </div>
-          <div style={{ ...row, borderBottom: 'none' }}>
-            <div style={label}>👨‍💻 Built with</div>
-            <div style={{ fontSize: 12, color: '#555' }}>React + Node.js</div>
-          </div>
-        </div>
       </div>
 
       <BottomNav />

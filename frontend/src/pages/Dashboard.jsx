@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import BottomNav from '../components/BottomNav.jsx';
 
 const colorHex = { blue: '#0084ff', red: '#ff3b3b', green: '#00b84c', yellow: '#ffcc00' };
@@ -19,21 +20,57 @@ export default function Dashboard() {
   const [lbModal, setLbModal] = useState(false);
   const [fullLb, setFullLb] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [totalUnread, setTotalUnread] = useState(0); 
+  
+  const socketRef = useRef(null);
 
   useEffect(() => {
+    let isMounted = true;
     async function init() {
       const me = await authFetch('/api/auth/me').then(r => r.json());
       if (!me.success) { localStorage.removeItem('ludo_token'); navigate('/'); return; }
+      if (!isMounted) return;
       setUser(me.user);
+      
       const dash = await authFetch('/api/dashboard').then(r => r.json());
-      if (dash.success) {
+      if (dash.success && isMounted) {
         setUser(dash.user);
         setLeaderboard(dash.leaderboard || []);
         setRecentGames(dash.recentGames || []);
       }
-      setLoading(false);
+      
+      // Fetch friends to calculate initial unread messages
+      const friendsData = await authFetch('/api/friends').then(r => r.json()).catch(() => ({}));
+      if (friendsData.success && friendsData.friends && isMounted) {
+        const unread = friendsData.friends.reduce((sum, f) => sum + (f.unread || 0), 0);
+        setTotalUnread(unread);
+      }
+      
+      if (isMounted) setLoading(false);
+
+      // REAL-TIME SOCKET FOR UNREAD MESSAGES ON DASHBOARD
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+      const sock = io(BACKEND_URL, { transports: ['websocket', 'polling'], reconnection: true });
+      socketRef.current = sock;
+
+      sock.on('connect', () => {
+        sock.emit('joinChat', { userId: me.user.id, username: me.user.username });
+      });
+
+      // Agar koi background me message bhejta hai, toh red dot turant update hoga
+      sock.on('newMessage', (data) => {
+        if (data.fromId !== me.user.id) {
+          setTotalUnread(prev => prev + 1);
+        }
+      });
     }
+    
     init();
+
+    return () => {
+      isMounted = false;
+      if (socketRef.current) socketRef.current.disconnect();
+    };
   }, [navigate]);
 
   function genCode() {
@@ -54,12 +91,6 @@ export default function Dashboard() {
     if (data.success) setFullLb(data.players);
   }
 
-  async function logout() {
-    await authFetch('/api/auth/logout', { method: 'POST' });
-    localStorage.removeItem('ludo_token');
-    navigate('/');
-  }
-
   if (loading) return (
     <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#0a0a1a,#12122a,#1a1a35)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: 14 }}>
       Loading...
@@ -72,13 +103,20 @@ export default function Dashboard() {
   return (
     <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#0a0a1a,#12122a,#1a1a35)', color: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* Header */}
       <header style={{ background: 'rgba(0,0,0,0.6)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ fontSize: 20, fontWeight: 900, color: '#ffcc00' }}>🎲 Ludo Pro</div>
-        <button onClick={logout} style={{ background: 'rgba(255,59,59,0.15)', border: '1px solid rgba(255,59,59,0.3)', color: '#ff6b6b', fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, cursor: 'pointer' }}>Logout</button>
+        
+        {/* Chat Button with Live Red Dot Indicator */}
+        <div onClick={() => navigate('/chats')} style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.1)', width: 36, height: 36, borderRadius: '50%' }}>
+          <span style={{ fontSize: 18 }}>💬</span>
+          {totalUnread > 0 && (
+            <span style={{ position: 'absolute', top: -2, right: -2, background: '#ff3b3b', width: 14, height: 14, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, border: '2px solid #0a0a1a' }}>
+              {totalUnread > 9 ? '9+' : totalUnread}
+            </span>
+          )}
+        </div>
       </header>
 
-      {/* Content */}
       <div style={{ flex: 1, overflow: 'auto', padding: '12px 14px', paddingBottom: 74, display: 'flex', flexDirection: 'column', gap: 10 }}>
 
         {/* Welcome + stats */}
@@ -191,7 +229,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <BottomNav />
+      <BottomNav unreadCount={totalUnread} />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -22,9 +23,8 @@ const io = new Server(server, {
 
 const pool = new Pool({ 
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('localhost') 
-        ? false 
-        : { rejectUnauthorized: false }
+    // Agar production hai toh SSL on, warna local ke liye off
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Token storage: { token: userId }
@@ -98,6 +98,13 @@ async function initDB() {
                 created_at TIMESTAMP DEFAULT NOW(),
                 UNIQUE(from_user_id, to_user_id)
             );
+            CREATE TABLE IF NOT EXISTS blocked_users (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                blocked_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(user_id, blocked_id)
+            );
             CREATE TABLE IF NOT EXISTS online_users (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
@@ -160,7 +167,6 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 app.post('/api/auth/logout', (req, res) => {
-    // Clear token if provided
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.substring(7);
@@ -169,7 +175,6 @@ app.post('/api/auth/logout', (req, res) => {
     req.session.destroy(() => res.json({ success: true }));
 });
 
-// Clear all tokens for a user (for logout everywhere)
 app.post('/api/auth/logout-all', (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -180,10 +185,7 @@ app.post('/api/auth/logout-all', (req, res) => {
 });
 
 app.get('/api/auth/me', async (req, res) => {
-    // Check session first
     let userId = req.session.userId;
-    
-    // Then check token in Authorization header
     if (!userId) {
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -191,12 +193,9 @@ app.get('/api/auth/me', async (req, res) => {
             userId = authTokens[token];
         }
     }
-    
-    // Also check token in query param for convenience
     if (!userId && req.query.token) {
         userId = authTokens[req.query.token];
     }
-    
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
     
     try {
@@ -233,16 +232,12 @@ app.get('/api/dashboard', async (req, res) => {
     if (!userId) {
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
+            userId = authTokens[authHeader.substring(7)];
         }
     }
     if (!userId) return res.status(401).json({ success: false, error: 'Not logged in' });
     try {
-        const userResult = await pool.query(
-            'SELECT username, wins, games_played, kills, created_at FROM users WHERE id = $1',
-            [userId]
-        );
+        const userResult = await pool.query('SELECT username, wins, games_played, kills, created_at FROM users WHERE id = $1', [userId]);
         const lbResult = await pool.query(`
             SELECT username, wins, games_played, kills,
                    CASE WHEN games_played > 0 THEN ROUND((wins::numeric / games_played) * 100, 1) ELSE 0 END AS win_rate
@@ -273,17 +268,11 @@ app.get('/api/profile', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
     }
     if (!userId) return res.status(401).json({ success: false, error: 'Not logged in' });
     try {
-        const userResult = await pool.query(
-            'SELECT username, wins, games_played, kills, created_at FROM users WHERE id = $1',
-            [userId]
-        );
+        const userResult = await pool.query('SELECT username, wins, games_played, kills, created_at FROM users WHERE id = $1', [userId]);
         const historyResult = await pool.query(`
             SELECT gr.color, gr.rank, gr.kills, gs.played_at, gs.total_players
             FROM game_results gr
@@ -310,15 +299,11 @@ app.get('/api/profile', async (req, res) => {
     }
 });
 
-// Change password
 app.post('/api/auth/change-password', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
     }
     if (!userId) return res.status(401).json({ success: false, error: 'Not logged in' });
     const { oldPassword, newPassword } = req.body;
@@ -337,20 +322,16 @@ app.post('/api/auth/change-password', async (req, res) => {
     }
 });
 
-// ── FRIENDS API ─────────────────────────────────────────────────────────────────
+// ── FRIENDS & PRIVACY API ───────────────────────────────────────────────────
 app.get('/api/friends', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
     
     try {
-        // Get accepted friends
         const friends = await pool.query(`
             SELECT u.id, u.username, u.wins, u.games_played, u.kills,
                    CASE WHEN u.games_played > 0 THEN ROUND((u.wins::numeric / u.games_played) * 100, 1) ELSE 0 END AS win_rate,
@@ -361,7 +342,6 @@ app.get('/api/friends', async (req, res) => {
             WHERE (f.user_id = $1 OR f.friend_id = $1) AND f.status = 'accepted'
         `, [userId]);
         
-        // Get pending requests sent by me
         const sentRequests = await pool.query(`
             SELECT u.id, u.username, fr.created_at
             FROM friend_requests fr
@@ -369,7 +349,6 @@ app.get('/api/friends', async (req, res) => {
             WHERE fr.from_user_id = $1 AND fr.status = 'pending'
         `, [userId]);
         
-        // Get pending requests received by me
         const receivedRequests = await pool.query(`
             SELECT u.id, u.username, fr.created_at
             FROM friend_requests fr
@@ -379,12 +358,15 @@ app.get('/api/friends', async (req, res) => {
         
         res.json({
             success: true,
-            friends: friends.rows,
+            friends: friends.rows.map(f => ({
+                ...f,
+                activityStatus: userActivity[f.id]?.status || (f.is_online ? 'online' : 'offline'),
+                currentRoom: userActivity[f.id]?.roomId || null
+            })),
             sentRequests: sentRequests.rows,
             receivedRequests: receivedRequests.rows
         });
     } catch (err) {
-        console.error('Friends error:', err.message);
         res.json({ success: false, error: err.message });
     }
 });
@@ -393,10 +375,7 @@ app.post('/api/friends/send', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
     
@@ -404,39 +383,39 @@ app.post('/api/friends/send', async (req, res) => {
     if (!username) return res.json({ success: false, error: 'Username required' });
     
     try {
-        // Find the user to send request to
         const targetResult = await pool.query('SELECT id FROM users WHERE LOWER(username) = LOWER($1)', [username]);
         if (targetResult.rows.length === 0) return res.json({ success: false, error: 'User not found' });
         const targetId = targetResult.rows[0].id;
         
         if (targetId === userId) return res.json({ success: false, error: 'Cannot add yourself' });
+
+        // Block List Check
+        const blockedCheck = await pool.query(`SELECT id FROM blocked_users WHERE (user_id = $1 AND blocked_id = $2) OR (user_id = $2 AND blocked_id = $1)`, [userId, targetId]);
+        if (blockedCheck.rows.length > 0) return res.json({ success: false, error: 'Cannot send request to this user' });
+
+        // BUG FIX: Self-Healing Logic
+        // Agar purane bug ki wajah se koi 'accepted' status wali request atak gayi hai, toh usko delete kar do
+        await pool.query(`
+            DELETE FROM friend_requests 
+            WHERE ((from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1)) 
+            AND status = 'accepted'
+        `, [userId, targetId]);
         
-        // Check if already friends or request exists
         const existing = await pool.query(`
             SELECT id FROM friend_requests 
-            WHERE (from_user_id = $1 AND to_user_id = $2) 
-               OR (from_user_id = $2 AND to_user_id = $1)
+            WHERE (from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1)
         `, [userId, targetId]);
-        
         if (existing.rows.length > 0) return res.json({ success: false, error: 'Request already exists' });
         
-        // Also check friends table
         const existingFriend = await pool.query(`
             SELECT id FROM friends 
-            WHERE (user_id = $1 AND friend_id = $2) 
-               OR (user_id = $2 AND friend_id = $1)
+            WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)
         `, [userId, targetId]);
-        
         if (existingFriend.rows.length > 0) return res.json({ success: false, error: 'Already friends' });
         
-        await pool.query(
-            'INSERT INTO friend_requests (from_user_id, to_user_id) VALUES ($1, $2)',
-            [userId, targetId]
-        );
-        
+        await pool.query('INSERT INTO friend_requests (from_user_id, to_user_id) VALUES ($1, $2)', [userId, targetId]);
         res.json({ success: true, message: 'Friend request sent!' });
     } catch (err) {
-        if (err.code === '23505') return res.json({ success: false, error: 'Request already exists' });
         res.json({ success: false, error: err.message });
     }
 });
@@ -445,29 +424,14 @@ app.post('/api/friends/accept', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
     
-    const { fromUserId } = req.body;
-    if (!fromUserId) return res.json({ success: false, error: 'User ID required' });
-    
     try {
-        // Update request status
-        await pool.query(
-            'UPDATE friend_requests SET status = $1 WHERE from_user_id = $2 AND to_user_id = $3',
-            ['accepted', fromUserId, userId]
-        );
-        
-        // Add to friends table
-        await pool.query(
-            'INSERT INTO friends (user_id, friend_id, status) VALUES ($1, $2, $3)',
-            [userId, fromUserId, 'accepted']
-        );
-        
+        // BUG FIX: Update karne ki jagah permanently delete karo, kyu ki user ab friends table me jaa raha hai. (Prevent ghost rows)
+        await pool.query('DELETE FROM friend_requests WHERE (from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1)', [req.body.fromUserId, userId]);
+        await pool.query('INSERT INTO friends (user_id, friend_id, status) VALUES ($1, $2, $3)', [userId, req.body.fromUserId, 'accepted']);
         res.json({ success: true, message: 'Friend added!' });
     } catch (err) {
         res.json({ success: false, error: err.message });
@@ -478,21 +442,12 @@ app.post('/api/friends/reject', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
     
-    const { fromUserId } = req.body;
-    if (!fromUserId) return res.json({ success: false, error: 'User ID required' });
-    
     try {
-        await pool.query(
-            'DELETE FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2',
-            [fromUserId, userId]
-        );
+        await pool.query('DELETE FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2', [req.body.fromUserId, userId]);
         res.json({ success: true });
     } catch (err) {
         res.json({ success: false, error: err.message });
@@ -503,10 +458,7 @@ app.post('/api/friends/remove', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
     
@@ -515,7 +467,57 @@ app.post('/api/friends/remove', async (req, res) => {
     
     try {
         await pool.query('DELETE FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)', [userId, friendId]);
+        await pool.query('DELETE FROM friend_requests WHERE (from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1)', [userId, friendId]);
         res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// ── BLOCK SYSTEM API ──
+app.post('/api/friends/block', async (req, res) => {
+    let userId = req.session.userId;
+    if (!userId) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
+    }
+    if (!userId) return res.status(401).json({ error: 'Not logged in' });
+    const { friendId } = req.body;
+    try {
+        await pool.query('DELETE FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)', [userId, friendId]);
+        await pool.query('DELETE FROM friend_requests WHERE (from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1)', [userId, friendId]);
+        await pool.query('INSERT INTO blocked_users (user_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [userId, friendId]);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/friends/unblock', async (req, res) => {
+    let userId = req.session.userId;
+    if (!userId) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
+    }
+    if (!userId) return res.status(401).json({ error: 'Not logged in' });
+    try {
+        await pool.query('DELETE FROM blocked_users WHERE user_id = $1 AND blocked_id = $2', [userId, req.body.blockedId]);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/friends/blocked', async (req, res) => {
+    let userId = req.session.userId;
+    if (!userId) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
+    }
+    if (!userId) return res.status(401).json({ error: 'Not logged in' });
+    try {
+        const result = await pool.query('SELECT u.id, u.username FROM blocked_users b JOIN users u ON b.blocked_id = u.id WHERE b.user_id = $1', [userId]);
+        res.json({ success: true, blocked: result.rows });
     } catch (err) {
         res.json({ success: false, error: err.message });
     }
@@ -527,8 +529,7 @@ app.get('/api/users/search', async (req, res) => {
     if (!userId) {
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
+            userId = authTokens[authHeader.substring(7)];
         }
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
@@ -542,23 +543,22 @@ app.get('/api/users/search', async (req, res) => {
                    CASE WHEN games_played > 0 THEN ROUND((wins::numeric / games_played) * 100, 1) ELSE 0 END AS win_rate
             FROM users 
             WHERE LOWER(username) LIKE LOWER($1) AND id != $2
+              AND id NOT IN (SELECT blocked_id FROM blocked_users WHERE user_id = $2)
+              AND id NOT IN (SELECT user_id FROM blocked_users WHERE blocked_id = $2)
             LIMIT 10
         `, ['%' + q + '%', userId]);
-        
         res.json({ success: true, users: users.rows });
     } catch (err) {
         res.json({ success: false, error: err.message });
     }
 });
 
-// ── INVITE FRIEND TO GAME ───────────────────────────────────────────────────────
 app.post('/api/invite', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
+            userId = authTokens[authHeader.substring(7)];
         }
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
@@ -566,22 +566,17 @@ app.post('/api/invite', async (req, res) => {
     const { roomId, friendId } = req.body;
     if (!roomId || !friendId) return res.json({ success: false, error: 'Room ID and Friend ID required' });
     
-    // Store invite in memory (could be stored in DB for persistence)
     if (!pendingInvites[friendId]) pendingInvites[friendId] = [];
     pendingInvites[friendId].push({ fromUserId: userId, roomId, timestamp: Date.now() });
-    
-    // Clean old invites (older than 5 minutes)
     pendingInvites[friendId] = pendingInvites[friendId].filter(i => Date.now() - i.timestamp < 300000);
-    
     res.json({ success: true, message: 'Invite sent!' });
 });
 
-// Pending invites storage
 const pendingInvites = {};
 
-// ── FRIEND CHAT (in-memory, auto-deletes after 10 minutes) ─────────────────
-const chatMessages = {}; // key: "userId1_userId2" (sorted), value: [{msgId,from,fromId,message,time,replyTo,reactions,deletedFor,deleted,edited,status}]
-const userLastSeen = {}; // userId -> timestamp (null if online)
+// ── FRIEND CHAT ─────────────────────────────────────────────────────────────
+const chatMessages = {}; 
+const userLastSeen = {}; 
 
 function getChatKey(id1, id2) {
     return [id1, id2].sort().join('_');
@@ -595,30 +590,23 @@ app.get('/api/chat/history/:friendId', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
     
     const friendId = parseInt(req.params.friendId);
     if (!friendId) return res.json({ success: true, messages: [] });
-    
+
+    // Block Check
+    const blockedCheck = await pool.query(`SELECT id FROM blocked_users WHERE (user_id = $1 AND blocked_id = $2) OR (user_id = $2 AND blocked_id = $1)`, [userId, friendId]);
+    if (blockedCheck.rows.length > 0) return res.json({ success: true, messages: [] });
+
     const key = getChatKey(userId, friendId);
     const oneDayAgo = Date.now() - 86400000;
     
-    // Clean very old messages (older than 24h)
-    if (chatMessages[key]) {
-        chatMessages[key] = chatMessages[key].filter(m => m.time > oneDayAgo);
-    }
+    if (chatMessages[key]) chatMessages[key] = chatMessages[key].filter(m => m.time > oneDayAgo);
     
-    // Filter messages deleted for this user
-    const msgs = (chatMessages[key] || []).filter(m => {
-        if (!m.deletedFor) return true;
-        return !m.deletedFor.includes(String(userId));
-    });
-    
+    const msgs = (chatMessages[key] || []).filter(m => !m.deletedFor || !m.deletedFor.includes(String(userId)));
     res.json({ success: true, messages: msgs });
 });
 
@@ -626,74 +614,60 @@ app.post('/api/chat/send', async (req, res) => {
     let userId = req.session.userId;
     if (!userId) {
         const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            userId = authTokens[token];
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) userId = authTokens[authHeader.substring(7)];
     }
     if (!userId) return res.status(401).json({ error: 'Not logged in' });
     
     const { toId, from, fromId, message, time, msgId, replyTo } = req.body;
     if (!toId || !message) return res.json({ success: false, error: 'Missing data' });
+
+    const blockedCheck = await pool.query(`SELECT id FROM blocked_users WHERE (user_id = $1 AND blocked_id = $2) OR (user_id = $2 AND blocked_id = $1)`, [userId, toId]);
+    if (blockedCheck.rows.length > 0) return res.json({ success: false, error: 'User is blocked' });
     
     const key = getChatKey(userId, toId);
     if (!chatMessages[key]) chatMessages[key] = [];
     
-    // Check for duplicate msgId (socket already stored it)
     const existingMsgId = msgId || null;
     if (existingMsgId && chatMessages[key].some(m => m.msgId === existingMsgId)) {
-        return res.json({ success: true }); // Already stored via socket
+        return res.json({ success: true });
     }
     
     const msgData = { msgId: existingMsgId || `msg_${Date.now()}_${Math.random().toString(36).substr(2,6)}`, from, fromId: parseInt(fromId) || userId, message, time: time || Date.now(), replyTo: replyTo || null, reactions: {}, deletedFor: [], status: 'sent' };
     chatMessages[key].push(msgData);
     
-    // Keep only last 100 messages
-    if (chatMessages[key].length > 100) {
-        chatMessages[key] = chatMessages[key].slice(-100);
-    }
-    
+    if (chatMessages[key].length > 100) chatMessages[key] = chatMessages[key].slice(-100);
     res.json({ success: true });
 });
 
-// ── SOCKET.IO GAME ───────────────────────────────────────────────────────────
+// ── SOCKET.IO GAME & PRESENCE ───────────────────────────────────────────────
 const rooms = {};
+const userActivity = {}; // { userId: { status: 'online' | 'in_lobby' | 'in_match', roomId: 'XYZ' } }
 const assignmentOrder = ['blue', 'green', 'red', 'yellow'];
 const turnOrder = ['blue', 'red', 'green', 'yellow'];
 
-// Track user's previous room for rejoin
-const userRooms = {}; // userId -> roomId
-// Room chat history (last 50 messages)
-const roomChats = {}; // roomId -> [{user, message, time, color}]
+const userRooms = {}; 
+const roomChats = {}; 
 
 function getOppositeColor(c) {
-    if (c === 'blue') return 'green';
-    if (c === 'green') return 'blue';
-    if (c === 'red') return 'yellow';
-    if (c === 'yellow') return 'red';
-    return 'green';
+    return c === 'blue' ? 'green' : c === 'green' ? 'blue' : c === 'red' ? 'yellow' : 'red';
 }
 
 io.on('connection', (socket) => {
-    // Handle rejoin
     socket.on('rejoinRoom', (data) => {
         let roomId = data.roomId;
         let userId = data.userId;
         if (!roomId || !userId) return;
         
-        // Check if user was in this room before
         let room = rooms[roomId];
         if (!room) {
             socket.emit('errorMsg', 'Room no longer exists');
             return;
         }
         
-        // Find the player's previous info
         let playerInfo = null;
         for (let i = 0; i < room.players.length; i++) {
             if (room.players[i].userId === userId) {
                 playerInfo = room.players[i];
-                // Fix host rejoin: check BEFORE updating socket id, then update room.host if needed
                 if (room.host === playerInfo.id) room.host = socket.id;
                 room.players[i].id = socket.id;
                 room.players[i].online = true;
@@ -705,19 +679,12 @@ io.on('connection', (socket) => {
             socket.join(roomId);
             userRooms[userId] = roomId;
             socket.emit('rejoined', { 
-                color: playerInfo.color, 
-                roomId, 
-                isHost: room.host === socket.id, 
-                name: playerInfo.name,
+                color: playerInfo.color, roomId, isHost: room.host === socket.id, name: playerInfo.name,
                 gameState: room.status === 'playing' ? { gameState: room.gameState, activeColors: room.activeColors, turnColor: room.turnColor } : null
             });
             io.to(roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
             io.to(roomId).emit('playerRejoined', { color: playerInfo.color, name: playerInfo.name });
-            
-            // Send chat history
-            if (roomChats[roomId]) {
-                socket.emit('chatHistory', { messages: roomChats[roomId].slice(-50) });
-            }
+            if (roomChats[roomId]) socket.emit('chatHistory', { messages: roomChats[roomId].slice(-50) });
         } else {
             socket.emit('errorMsg', 'Could not rejoin. You may have been removed.');
         }
@@ -734,7 +701,6 @@ io.on('connection', (socket) => {
         }
         let room = rooms[roomId];
 
-        // ── Reconnect: same socket.id already in room ──
         if (room.players.some(p => p.id === socket.id)) {
             let pIndex = room.players.findIndex(p => p.id === socket.id);
             socket.emit('joined', { color: room.players[pIndex].color, roomId, isHost: room.host === socket.id, name: room.players[pIndex].name });
@@ -742,16 +708,14 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // ── Reconnect: same userId but new socket.id (socket dropped and reconnected) ──
         if (userId) {
             let existingIdx = room.players.findIndex(p => p.userId == userId);
             if (existingIdx !== -1) {
                 const existing = room.players[existingIdx];
-                // Update host reference if this player was the host
                 if (room.host === existing.id) room.host = socket.id;
                 existing.id = socket.id;
                 existing.online = true;
-                if (userId) userRooms[userId] = roomId;
+                userRooms[userId] = roomId;
                 socket.join(roomId);
                 socket.emit('joined', { color: existing.color, roomId, isHost: room.host === socket.id, name: existing.name });
                 io.to(roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
@@ -770,42 +734,33 @@ io.on('connection', (socket) => {
         }
         let assignedColor = availableColors[0];
         room.players.push({ id: socket.id, color: assignedColor, online: true, name: playerName, userId: userId });
+        
+        if (userId) {
+            userActivity[userId] = { status: 'in_lobby', roomId };
+            io.emit('friendActivityUpdate', { userId, status: 'in_lobby', roomId });
+        }
+        
         if (userId) userRooms[userId] = roomId;
         socket.join(roomId);
         socket.emit('joined', { color: assignedColor, roomId, isHost: room.host === socket.id, name: playerName });
         io.to(roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
-        
-        // Send chat history
-        if (roomChats[roomId]) {
-            socket.emit('chatHistory', { messages: roomChats[roomId].slice(-50) });
-        }
+        if (roomChats[roomId]) socket.emit('chatHistory', { messages: roomChats[roomId].slice(-50) });
     });
     
-    // In-game chat
     socket.on('sendChat', (data) => {
         let room = rooms[data.roomId];
         if (!room) return;
         let player = room.players.find(p => p.id === socket.id);
         if (!player) return;
-        
-        let message = {
-            user: player.name,
-            message: data.message.substring(0, 200),
-            time: Date.now(),
-            color: player.color
-        };
-        
+        let message = { user: player.name, message: data.message.substring(0, 200), time: Date.now(), color: player.color };
         if (!roomChats[data.roomId]) roomChats[data.roomId] = [];
         roomChats[data.roomId].push(message);
         if (roomChats[data.roomId].length > 50) roomChats[data.roomId].shift();
-        
         io.to(data.roomId).emit('newChat', message);
     });
     
-    // Invite friend via socket
     socket.on('inviteFriend', (data) => {
         let { friendId, roomId, fromName } = data;
-        // Find friend's socket and send invite notification
         for (let [uid, rid] of Object.entries(userRooms)) {
             if (uid === friendId) {
                 io.to(rid).emit('gameInvite', { fromName, roomId });
@@ -891,7 +846,6 @@ io.on('connection', (socket) => {
             room.kills = {};
             room.mode = mode;
             room.teams = null;
-            // 2v2: needs exactly 4 players — team A: positions 0,2 | team B: positions 1,3
             if (mode === '2v2' && room.activeColors.length === 4) {
                 room.teams = {
                     A: [room.activeColors[0], room.activeColors[2]],
@@ -903,6 +857,13 @@ io.on('connection', (socket) => {
                 room.kills[c] = 0;
             });
             io.to(roomId).emit('gameStarted', { activeColors: room.activeColors, turnColor: room.turnColor, mode: room.mode, teams: room.teams });
+            
+            room.players.forEach(p => {
+                if (p.userId) {
+                    userActivity[p.userId] = { status: 'in_match', roomId };
+                    io.emit('friendActivityUpdate', { userId: p.userId, status: 'in_match', roomId });
+                }
+            });
         }
     });
 
@@ -988,20 +949,24 @@ io.on('connection', (socket) => {
 
     socket.on('sendInteraction', (data) => { io.to(data.roomId).emit('showInteraction', { color: data.color, type: data.type, content: data.content }); });
 
-    // Handle leave room
     socket.on('leaveRoom', (data) => {
         let room = rooms[data.roomId];
         if (room) {
             let pIndex = room.players.findIndex(p => p.id === socket.id);
             if (pIndex !== -1) {
                 let playerName = room.players[pIndex].name;
+                let playerUserId = room.players[pIndex].userId;
                 room.players.splice(pIndex, 1);
                 room.activeColors = room.activeColors.filter(c => c !== playerName);
                 socket.leave(data.roomId);
                 io.to(data.roomId).emit('playerLeft', { name: playerName });
                 io.to(data.roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
+
+                if (playerUserId) {
+                    userActivity[playerUserId] = { status: 'online', roomId: null };
+                    io.emit('friendActivityUpdate', { userId: playerUserId, status: 'online', roomId: null });
+                }
                 
-                // Transfer host if needed
                 if (room.host === socket.id && room.players.length > 0) {
                     room.host = room.players[0].id;
                     io.to(data.roomId).emit('updatePlayers', { players: room.players, hostId: room.host });
@@ -1010,15 +975,12 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Friend chat handlers
     socket.on('joinChat', (data) => {
         socket.userId = data.userId;
         socket.username = data.username;
-        userLastSeen[data.userId] = null; // Now online
-        // Store online status in DB
+        userLastSeen[data.userId] = null; 
         pool.query('INSERT INTO online_users (user_id, socket_id) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET socket_id = $2, last_seen = NOW()', [data.userId, socket.id])
             .catch(() => {});
-        // Notify all connected sockets that this user is online
         io.emit('friendOnline', { userId: data.userId });
     });
 
@@ -1026,14 +988,12 @@ io.on('connection', (socket) => {
         const msgId = data.msgId || `msg_${Date.now()}_${Math.random().toString(36).substr(2,6)}`;
         const key = getChatKey(data.fromId, data.toId);
         if (!chatMessages[key]) chatMessages[key] = [];
-        // Avoid duplicate if HTTP already stored it
         if (!chatMessages[key].some(m => m.msgId === msgId)) {
             const msg = { msgId, from: data.from, fromId: data.fromId, message: data.message, time: data.time || Date.now(), replyTo: data.replyTo || null, reactions: {}, deletedFor: [], status: 'sent' };
             chatMessages[key].push(msg);
             if (chatMessages[key].length > 200) chatMessages[key] = chatMessages[key].slice(-200);
         }
         const stored = chatMessages[key].find(m => m.msgId === msgId);
-        // Deliver to recipient
         const recipSock = findSocket(data.toId);
         if (recipSock) {
             if (stored) stored.status = 'delivered';
@@ -1050,17 +1010,16 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ── Typing indicators ─────────────────────────────────────────────────────
     socket.on('typing', (data) => {
         const r = findSocket(data.toId);
         if (r) r.emit('typing', { fromId: data.fromId, from: data.from });
     });
+    
     socket.on('stopTyping', (data) => {
         const r = findSocket(data.toId);
         if (r) r.emit('stopTyping', { fromId: data.fromId });
     });
 
-    // ── Message seen ──────────────────────────────────────────────────────────
     socket.on('messageSeen', (data) => {
         const key = getChatKey(data.viewerId, data.senderId);
         if (chatMessages[key]) {
@@ -1070,7 +1029,6 @@ io.on('connection', (socket) => {
         if (senderSock) senderSock.emit('messagesSeen', { byId: data.viewerId });
     });
 
-    // ── Delete message ────────────────────────────────────────────────────────
     socket.on('deleteMessage', (data) => {
         const key = getChatKey(data.fromId, data.toId);
         if (!chatMessages[key]) return;
@@ -1089,7 +1047,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ── Edit message ──────────────────────────────────────────────────────────
     socket.on('editMessage', (data) => {
         const key = getChatKey(data.fromId, data.toId);
         if (!chatMessages[key]) return;
@@ -1101,7 +1058,6 @@ io.on('connection', (socket) => {
         socket.emit('messageEdited', { msgId: data.msgId, newText: data.newText });
     });
 
-    // ── Emoji reactions ───────────────────────────────────────────────────────
     socket.on('reactToMessage', (data) => {
         const key = getChatKey(data.fromId, data.toId);
         if (!chatMessages[key]) return;
@@ -1109,12 +1065,10 @@ io.on('connection', (socket) => {
         if (!msg) return;
         if (!msg.reactions) msg.reactions = {};
         const uid = String(data.fromId);
-        // Remove existing reaction by this user (toggle)
         Object.keys(msg.reactions).forEach(e => {
             msg.reactions[e] = msg.reactions[e].filter(id => String(id) !== uid);
             if (msg.reactions[e].length === 0) delete msg.reactions[e];
         });
-        // Add new reaction
         if (data.emoji) {
             if (!msg.reactions[data.emoji]) msg.reactions[data.emoji] = [];
             msg.reactions[data.emoji].push(uid);
@@ -1125,7 +1079,6 @@ io.on('connection', (socket) => {
         socket.emit('messageReacted', payload);
     });
 
-    // ── Clear chat ────────────────────────────────────────────────────────────
     socket.on('clearChat', (data) => {
         const key = getChatKey(data.userId, data.friendId);
         if (chatMessages[key]) {
@@ -1147,13 +1100,14 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        // Clean up friend chat online status
         if (socket.userId) {
             const lastSeenTs = Date.now();
             userLastSeen[socket.userId] = lastSeenTs;
             pool.query('DELETE FROM online_users WHERE user_id = $1 AND socket_id = $2', [socket.userId, socket.id]).catch(() => {});
-            // Notify friends that this user is offline, include last seen time
             io.emit('friendOffline', { userId: socket.userId, lastSeen: lastSeenTs });
+            if (userActivity[socket.userId]) {
+              delete userActivity[socket.userId];
+            }
         }
 
         for (let roomId in rooms) {
@@ -1167,7 +1121,6 @@ io.on('connection', (socket) => {
                 io.to(roomId).emit('playerStatus', { color: disconnectedColor, status: 'offline', name: disconnectedName });
                 io.to(roomId).emit('playerDisconnected', { color: disconnectedColor, name: disconnectedName });
 
-                // Auto-pass turn if it's the disconnected player's turn
                 if (room.status === 'playing' && room.turnColor === disconnectedColor) {
                     const capturedRoomId = roomId;
                     const capturedColor = disconnectedColor;
@@ -1181,10 +1134,9 @@ io.on('connection', (socket) => {
                                 io.to(capturedRoomId).emit('turnChanged', { color: r.turnColor, reason: 'auto' });
                             }
                         }
-                    }, 10000); // 10s grace period to reconnect
+                    }, 10000); 
                 }
                 
-                // Keep room active for rejoin
                 if (room.players.every(p => !p.online)) {
                     setTimeout(() => {
                         const r = rooms[roomId];
@@ -1192,9 +1144,8 @@ io.on('connection', (socket) => {
                             delete rooms[roomId];
                             delete roomChats[roomId];
                         }
-                    }, 300000); // 5 minutes
+                    }, 300000);
                 } else if (room.host === socket.id) {
-                    // Transfer host to next online player
                     const newHost = room.players.find(p => p.online);
                     if (newHost) {
                         room.host = newHost.id;

@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 const navItems = [
   { to: '/dashboard', icon: '🏠', label: 'Home' },
   { to: '/friends', icon: '👥', label: 'Friends' },
-  { to: '/game', icon: '🎮', label: 'Play' },
+  // Yahan se 'Play' wala object hata diya gaya hai
   { to: '/profile', icon: '👤', label: 'Profile' },
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ];

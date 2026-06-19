@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Profile from './pages/Profile.jsx';
 import Game from './pages/Game.jsx';
 import Friends from './pages/Friends.jsx';
+import Chats from './pages/Chats.jsx'; // 👈 Yahan Chats import kiya gaya hai
 import Settings from './pages/Settings.jsx';
 
 function ProtectedRoute({ children }) {
@@ -36,6 +37,8 @@ export default function App() {
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/game" element={<ProtectedRoute><Game /></ProtectedRoute>} />
         <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
+        {/* 👇 Yahan Chats ka naya route add kiya gaya hai 👇 */}
+        <Route path="/chats" element={<ProtectedRoute><Chats /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
