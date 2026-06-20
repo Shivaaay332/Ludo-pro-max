@@ -2,25 +2,38 @@
   box-sizing: border-box; 
   margin: 0; 
   padding: 0;
-  touch-action: pan-y manipulation;
+  /* Premium Native App Feel - Disable Zoom & Select */
+  touch-action: manipulation;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
 :root {
-  --blue: #0084ff; --green: #00b84c; --red: #ff3b3b; --yellow: #ffcc00; --purple: #7c3aed;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  --blue: #0084ff; 
+  --green: #10b981; 
+  --red: #f43f5e; 
+  --yellow: #f59e0b; 
+  --purple: #8b5cf6;
+  --bg-dark: #09090b;
+  --bg-card: rgba(255, 255, 255, 0.04);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
+
 html, body {
   width: 100%;
   height: 100%;
-  overflow: hidden;
+  overflow: hidden; /* Fixes entire screen */
   position: fixed;
-  overscroll-behavior: none;
+  overscroll-behavior-y: none; /* iOS bounce disable */
+  background-color: var(--bg-dark);
 }
-body { color: #fff; }
+
+body { color: #f4f4f5; }
 a { text-decoration: none; color: inherit; }
-button { font-family: inherit; }
+button { font-family: inherit; outline: none; }
 input { 
   font-family: inherit;
   -webkit-user-select: text;
@@ -30,3 +43,8 @@ input {
   width: 100%;
   height: 100%;
 }
+
+/* Custom Scrollbar for inner elements */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }

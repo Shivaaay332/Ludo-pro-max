@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav.jsx';
 
+// Premium Avatar Palette
+const AVATARS = ['👤', '🥷', '👑', '💻', '🤖', '👽', '👻', '🤡', '😈', '🦁', '🐯', '🐼', '🦊', '🦄', '🦖'];
+
 function authFetch(url, options = {}) {
   const token = localStorage.getItem('ludo_token');
   if (token) options.headers = { ...options.headers, 'Authorization': 'Bearer ' + token };
@@ -11,17 +14,32 @@ function authFetch(url, options = {}) {
 export default function Settings() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  
+  // Settings States
   const [sound, setSound] = useState(() => localStorage.getItem('ludo_sound') !== 'off');
   const [notifications, setNotifications] = useState(() => localStorage.getItem('ludo_notif') !== 'off');
-  const [theme, setTheme] = useState(() => localStorage.getItem('ludo_theme') || 'dark');
+  
+  // Edit Profile States
+  const [username, setUsername] = useState('');
+  const [avatar, setAvatar] = useState('👤');
+  const [profileMsg, setProfileMsg] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  
+  // Privacy States
+  const [privacyReq, setPrivacyReq] = useState('everyone');
+  const [showBlocked, setShowBlocked] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  
+  // Password Change
   const [showPwForm, setShowPwForm] = useState(false);
   const [pwOld, setPwOld] = useState('');
   const [pwNew, setPwNew] = useState('');
   const [pwMsg, setPwMsg] = useState('');
   
-  // Privacy & Block States
-  const [showBlocked, setShowBlocked] = useState(false);
-  const [blockedUsers, setBlockedUsers] = useState([]);
+  // Danger Zone
+  const [showDelete, setShowDelete] = useState(false);
+  const [delPassword, setDelPassword] = useState('');
+  const [delMsg, setDelMsg] = useState('');
   
   const [loading, setLoading] = useState(true);
 
@@ -29,54 +47,125 @@ export default function Settings() {
     authFetch('/api/auth/me').then(r => r.json()).then(d => {
       if (!d.success) { localStorage.removeItem('ludo_token'); navigate('/'); return; }
       setUser(d.user);
+      setUsername(d.user.username || '');
+      setAvatar(d.user.avatar || '👤');
+      setPrivacyReq(d.user.privacy_requests || 'everyone');
       setLoading(false);
     }).catch(() => { navigate('/'); });
   }, [navigate]);
 
-  function toggleSound() {
-    const next = !sound;
-    setSound(next);
-    localStorage.setItem('ludo_sound', next ? 'on' : 'off');
+  function toggleSound() { const next = !sound; setSound(next); localStorage.setItem('ludo_sound', next ? 'on' : 'off'); }
+  function toggleNotif() { const next = !notifications; setNotifications(next); localStorage.setItem('ludo_notif', next ? 'on' : 'off'); }
+
+  // 🔴 FIXED: UPDATE USERNAME API CALL WITH ERROR HANDLING 🔴
+  async function updateUsername() {
+    if(!username.trim() || username === user?.username) return;
+    setIsUpdating(true);
+    setProfileMsg('');
+    try {
+      const res = await authFetch('/api/auth/change-username', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ newUsername: username.trim() }) 
+      });
+      
+      const data = await res.json();
+      setIsUpdating(false);
+      
+      if(data.success) {
+        setProfileMsg('✅ Username updated successfully!');
+        setUser({...user, username: data.newUsername});
+        setTimeout(()=>setProfileMsg(''), 3000);
+      } else {
+        setProfileMsg('❌ ' + (data.error || 'Update failed!'));
+      }
+    } catch(err) {
+      setIsUpdating(false);
+      setProfileMsg('❌ Server connection error! Did you restart the backend?');
+      console.error('Username Update Error:', err);
+    }
   }
 
-  function toggleNotif() {
-    const next = !notifications;
-    setNotifications(next);
-    localStorage.setItem('ludo_notif', next ? 'on' : 'off');
+  // 🔴 UPDATE AVATAR API CALL 🔴
+  async function updateAvatar(newAv) {
+    setAvatar(newAv);
+    try {
+      await authFetch('/api/auth/change-avatar', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ avatar: newAv }) 
+      });
+    } catch(err) { console.error('Avatar Update Error:', err); }
   }
 
-  function setThemePref(t) {
-    setTheme(t);
-    localStorage.setItem('ludo_theme', t);
+  // 🔴 UPDATE PRIVACY API CALL 🔴
+  async function updatePrivacy(val) {
+    setPrivacyReq(val);
+    try {
+      await authFetch('/api/auth/update-privacy', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ privacy_requests: val }) 
+      });
+    } catch(err) { console.error('Privacy Update Error:', err); }
   }
 
+  // 🔴 DELETE ACCOUNT API CALL WITH ERROR HANDLING 🔴
+  async function deleteAccount() {
+    if(!delPassword) { setDelMsg('Please enter your password to confirm'); return; }
+    if(!confirm('Are you absolutely sure you want to permanently delete your account? This action CANNOT be undone!')) return;
+    
+    setDelMsg('Processing...');
+    try {
+      const res = await authFetch('/api/auth/delete-account', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ password: delPassword }) 
+      });
+      
+      const data = await res.json();
+      if(data.success) {
+        alert('Your account has been deleted permanently.');
+        localStorage.removeItem('ludo_token');
+        navigate('/');
+      } else {
+        setDelMsg('❌ ' + data.error);
+      }
+    } catch(err) {
+      setDelMsg('❌ Server connection error!');
+      console.error('Delete Account Error:', err);
+    }
+  }
+
+  // 🔴 CHANGE PASSWORD 🔴
   async function changePassword() {
     if (!pwOld || !pwNew) { setPwMsg('Fill both fields'); return; }
     if (pwNew.length < 6) { setPwMsg('New password must be 6+ chars'); return; }
-    const data = await authFetch('/api/auth/change-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ oldPassword: pwOld, newPassword: pwNew })
-    }).then(r => r.json());
-    setPwMsg(data.success ? '✅ Password changed!' : (data.error || 'Failed'));
-    if (data.success) { setPwOld(''); setPwNew(''); setShowPwForm(false); }
+    try {
+      const res = await authFetch('/api/auth/change-password', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ oldPassword: pwOld, newPassword: pwNew }) 
+      });
+      const data = await res.json();
+      setPwMsg(data.success ? '✅ Password changed!' : ('❌ ' + (data.error || 'Failed')));
+      if (data.success) { setPwOld(''); setPwNew(''); setTimeout(() => setShowPwForm(false), 2000); }
+    } catch(err) { setPwMsg('❌ Server connection error!'); }
   }
 
   async function loadBlockedUsers() {
-    const data = await authFetch('/api/friends/blocked').then(r => r.json()).catch(() => ({}));
-    if (data.success) setBlockedUsers(data.blocked || []);
-    setShowBlocked(!showBlocked);
+    try {
+      const data = await authFetch('/api/friends/blocked').then(r => r.json());
+      if (data.success) setBlockedUsers(data.blocked || []);
+      setShowBlocked(!showBlocked);
+    } catch(e) { console.error(e); }
   }
 
   async function unblockUser(blockedId) {
-    const data = await authFetch('/api/friends/unblock', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ blockedId })
-    }).then(r => r.json()).catch(() => ({}));
-    
-    if (data.success) {
-      setBlockedUsers(prev => prev.filter(u => u.id !== blockedId));
-    }
+    try {
+      const data = await authFetch('/api/friends/unblock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockedId }) }).then(r => r.json());
+      if (data.success) setBlockedUsers(prev => prev.filter(u => u.id !== blockedId));
+    } catch(e) { console.error(e); }
   }
 
   async function logout() {
@@ -85,151 +174,144 @@ export default function Settings() {
     navigate('/');
   }
 
-  const bg = 'linear-gradient(135deg,#0a0a1a,#12122a,#1a1a35)';
-  const card = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, overflow: 'hidden', marginBottom: 10 };
-  const row = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)' };
-  const label = { fontSize: 14, fontWeight: 600, color: '#e0e0e0' };
-  const sub = { fontSize: 11, color: '#666', marginTop: 2 };
+  const card = { background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, overflow: 'hidden', marginBottom: 24, backdropFilter: 'blur(10px)' };
+  const row = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)' };
+  const label = { fontSize: 16, fontWeight: 800, color: '#f4f4f5' };
+  const sub = { fontSize: 13, color: '#a1a1aa', marginTop: 4, fontWeight: 500 };
 
-  if (loading) return (
-    <div style={{ height: '100%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>Loading...</div>
-  );
+  if (loading) return <div style={{ height: '100vh', background: 'var(--bg-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa' }}>Loading Settings...</div>;
 
   return (
-    <div style={{ height: '100%', background: bg, color: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <header style={{ background: 'rgba(0,0,0,0.5)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-        <div style={{ fontSize: 20 }}>⚙️</div>
-        <div style={{ fontSize: 17, fontWeight: 800 }}>Settings</div>
+    <div style={{ height: '100%', background: 'var(--bg-dark)', color: '#fff', display: 'flex', flexDirection: 'column' }}>
+      <header style={{ background: 'rgba(9, 9, 11, 0.7)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', backdropFilter: 'blur(16px)' }}>
+        <div style={{ fontSize: 22 }}>⚙️</div>
+        <div style={{ fontSize: 20, fontWeight: 900 }}>Settings</div>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', paddingBottom: 74 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px', paddingBottom: 100 }}>
 
-        {/* Profile Card */}
-        <div style={{ ...card, background: 'linear-gradient(135deg,rgba(0,132,255,0.15),rgba(124,58,237,0.15))' }}>
-          <div style={{ ...row, borderBottom: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg,#0084ff,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900 }}>
-                {user?.username?.charAt(0).toUpperCase()}
+        {/* EDIT PROFILE */}
+        <div style={{ fontSize: 13, color: '#71717a', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, paddingLeft: 4 }}>Edit Profile</div>
+        <div style={card}>
+          <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: '#a1a1aa' }}>Select Avatar</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {AVATARS.map(em => (
+                  <button key={em} onClick={() => updateAvatar(em)} style={{ width: 44, height: 44, borderRadius: 12, background: avatar === em ? 'var(--blue)' : 'rgba(255,255,255,0.05)', border: `2px solid ${avatar === em ? 'var(--blue)' : 'rgba(255,255,255,0.1)'}`, fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: avatar === em ? '0 4px 10px rgba(0,132,255,0.4)' : 'none' }}>
+                    {em}
+                  </button>
+                ))}
               </div>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>{user?.username}</div>
-                <div style={{ fontSize: 11, color: '#888' }}>
-                  {user?.games_played} games · {user?.wins} wins
-                </div>
-              </div>
+            </div>
+            
+            <div>
+               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: '#a1a1aa' }}>Change Username</div>
+               <div style={{ display: 'flex', gap: 10 }}>
+                  <input type="text" value={username} onChange={e=>setUsername(e.target.value)} maxLength={20} style={{ flex: 1, height: 48, padding: '0 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff', fontSize: 16, outline: 'none' }} />
+                  <button onClick={updateUsername} disabled={isUpdating || username === user?.username || username.trim() === ''} style={{ background: 'var(--blue)', border: 'none', borderRadius: 12, padding: '0 20px', color: '#fff', fontWeight: 800, cursor: 'pointer', opacity: (isUpdating || username === user?.username || username.trim() === '') ? 0.5 : 1 }}>Update</button>
+               </div>
+               {profileMsg && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: profileMsg.startsWith('✅') ? 'var(--green)' : 'var(--red)' }}>{profileMsg}</div>}
             </div>
           </div>
         </div>
 
-        {/* Gameplay */}
-        <div style={{ fontSize: 11, color: '#555', fontWeight: 700, letterSpacing: 1, padding: '8px 4px 4px', textTransform: 'uppercase' }}>Gameplay</div>
+        {/* PREFERENCES */}
+        <div style={{ fontSize: 13, color: '#71717a', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, paddingLeft: 4 }}>Preferences</div>
         <div style={card}>
           <div style={row}>
             <div>
               <div style={label}>🔊 Sound Effects</div>
-              <div style={sub}>Dice rolls, moves & win sounds</div>
+              <div style={sub}>Dice rolls, moves & game sounds</div>
             </div>
-            <div onClick={toggleSound} style={{ width: 46, height: 26, borderRadius: 13, background: sound ? '#0084ff' : '#333', cursor: 'pointer', position: 'relative', transition: '0.2s', flexShrink: 0 }}>
-              <div style={{ position: 'absolute', top: 3, left: sound ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: '0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+            <div onClick={toggleSound} style={{ width: 52, height: 32, borderRadius: 16, background: sound ? 'var(--blue)' : 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative', transition: 'background 0.3s' }}>
+              <div style={{ position: 'absolute', top: 2, left: sound ? 22 : 2, width: 28, height: 28, borderRadius: '50%', background: '#fff', transition: 'left 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)', boxShadow: '0 2px 5px rgba(0,0,0,0.3)' }} />
             </div>
           </div>
           <div style={{ ...row, borderBottom: 'none' }}>
             <div>
               <div style={label}>🔔 Notifications</div>
-              <div style={sub}>Game invites & friend requests</div>
+              <div style={sub}>Game invites & friend alerts</div>
             </div>
-            <div onClick={toggleNotif} style={{ width: 46, height: 26, borderRadius: 13, background: notifications ? '#0084ff' : '#333', cursor: 'pointer', position: 'relative', transition: '0.2s', flexShrink: 0 }}>
-              <div style={{ position: 'absolute', top: 3, left: notifications ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: '0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+            <div onClick={toggleNotif} style={{ width: 52, height: 32, borderRadius: 16, background: notifications ? 'var(--green)' : 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative', transition: 'background 0.3s' }}>
+              <div style={{ position: 'absolute', top: 2, left: notifications ? 22 : 2, width: 28, height: 28, borderRadius: '50%', background: '#fff', transition: 'left 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)', boxShadow: '0 2px 5px rgba(0,0,0,0.3)' }} />
             </div>
           </div>
         </div>
 
-        {/* Privacy & Blocking (NEW SECTION) */}
-        <div style={{ fontSize: 11, color: '#555', fontWeight: 700, letterSpacing: 1, padding: '8px 4px 4px', textTransform: 'uppercase' }}>🛡️ Privacy</div>
+        {/* ACCOUNT & PRIVACY */}
+        <div style={{ fontSize: 13, color: '#71717a', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, paddingLeft: 4 }}>Account & Privacy</div>
         <div style={card}>
-          <div style={{ ...row, cursor: 'pointer' }} onClick={loadBlockedUsers}>
+          
+          {/* PRIVACY FRIEND REQUESTS */}
+          <div style={row}>
             <div>
-              <div style={label}>🚫 Blocked Users</div>
-              <div style={sub}>Manage your blocked list</div>
+              <div style={label}>📩 Friend Requests</div>
+              <div style={sub}>Who can send you requests?</div>
             </div>
-            <div style={{ color: '#555', fontSize: 16 }}>{showBlocked ? '▲' : '▶'}</div>
+            <select value={privacyReq} onChange={e => updatePrivacy(e.target.value)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '8px 12px', borderRadius: 8, outline: 'none', fontWeight: 700, fontSize: 14 }}>
+              <option value="everyone" style={{color:'#000'}}>Everyone</option>
+              <option value="nobody" style={{color:'#000'}}>Nobody</option>
+            </select>
+          </div>
+
+          <div style={{ ...row, cursor: 'pointer' }} onClick={loadBlockedUsers}>
+            <div><div style={label}>🚫 Blocked Users</div><div style={sub}>Manage your blocked list</div></div>
+            <div style={{ color: '#a1a1aa', fontSize: 18 }}>{showBlocked ? '▲' : '▶'}</div>
           </div>
           {showBlocked && (
-            <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {blockedUsers.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#666', textAlign: 'center', padding: '10px 0' }}>No blocked users.</div>
-              ) : (
-                blockedUsers.map(u => (
-                  <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '10px 12px', borderRadius: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600 }}>{u.username}</span>
-                    <button onClick={() => unblockUser(u.id)} style={{ background: 'rgba(0, 184, 76, 0.2)', border: '1px solid rgba(0, 184, 76, 0.4)', color: '#00b84c', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Unblock</button>
+                <div style={{ fontSize: 14, color: '#71717a', textAlign: 'center', padding: '10px 0' }}>No blocked users.</div>
+              ) : blockedUsers.map(u => (
+                  <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.3)', padding: '12px 16px', borderRadius: 12 }}>
+                    <span style={{ fontSize: 16, fontWeight: 700 }}>{u.username}</span>
+                    <button onClick={() => unblockUser(u.id)} style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: 'var(--green)', borderRadius: 8, padding: '8px 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>Unblock</button>
                   </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Theme */}
-        <div style={{ fontSize: 11, color: '#555', fontWeight: 700, letterSpacing: 1, padding: '8px 4px 4px', textTransform: 'uppercase' }}>Appearance</div>
-        <div style={card}>
-          <div style={{ padding: '12px 16px' }}>
-            <div style={label}>🎨 Theme</div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              {[
-                { id: 'dark', label: '🌙 Dark', bg: 'linear-gradient(135deg,#0a0a1a,#12122a)' },
-                { id: 'midnight', label: '💜 Midnight', bg: 'linear-gradient(135deg,#0d0020,#1a0035)' },
-                { id: 'ocean', label: '🌊 Ocean', bg: 'linear-gradient(135deg,#001a33,#003366)' },
-              ].map(t => (
-                <div key={t.id} onClick={() => setThemePref(t.id)} style={{
-                  flex: 1, padding: '10px 6px', borderRadius: 10, textAlign: 'center',
-                  background: t.bg, border: `2px solid ${theme === t.id ? '#0084ff' : 'rgba(255,255,255,0.1)'}`,
-                  cursor: 'pointer', fontSize: 11, fontWeight: 600,
-                  transition: '0.2s', color: '#fff'
-                }}>
-                  {t.label}
-                </div>
               ))}
             </div>
+          )}
+
+          <div style={{ ...row, cursor: 'pointer' }} onClick={() => setShowPwForm(!showPwForm)}>
+            <div><div style={label}>🔐 Change Password</div><div style={sub}>Update account security</div></div>
+            <div style={{ color: '#a1a1aa', fontSize: 18 }}>{showPwForm ? '▲' : '▶'}</div>
+          </div>
+          {showPwForm && (
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, background: 'rgba(0,0,0,0.2)' }}>
+              <input type="password" placeholder="Current Password" value={pwOld} onChange={e => setPwOld(e.target.value)} style={{ height: 48, padding: '0 16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff', fontSize: 15, outline: 'none' }} />
+              <input type="password" placeholder="New Password (min 6)" value={pwNew} onChange={e => setPwNew(e.target.value)} style={{ height: 48, padding: '0 16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff', fontSize: 15, outline: 'none' }} />
+              {pwMsg && <div style={{ fontSize: 14, fontWeight: 600, color: pwMsg.startsWith('✅') ? 'var(--green)' : 'var(--red)' }}>{pwMsg}</div>}
+              <button onClick={changePassword} style={{ height: 48, background: 'linear-gradient(135deg, var(--blue), var(--purple))', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>Update Password</button>
+            </div>
+          )}
+
+          <div style={{ ...row, borderBottom: 'none', cursor: 'pointer' }} onClick={logout}>
+            <div style={{ ...label, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 10 }}>🚪 Log Out</div>
           </div>
         </div>
 
-        {/* Account */}
-        <div style={{ fontSize: 11, color: '#555', fontWeight: 700, letterSpacing: 1, padding: '8px 4px 4px', textTransform: 'uppercase' }}>Account</div>
-        <div style={card}>
-          <div style={{ ...row, cursor: 'pointer' }} onClick={() => setShowPwForm(!showPwForm)}>
+        {/* DANGER ZONE (DELETE ACCOUNT) */}
+        <div style={{ fontSize: 13, color: '#fca5a5', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, paddingLeft: 4 }}>Danger Zone</div>
+        <div style={{ background: 'rgba(244,63,94,0.05)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: 20, overflow: 'hidden', marginBottom: 24 }}>
+          <div style={{ ...row, borderBottom: showDelete ? '1px solid rgba(244,63,94,0.2)' : 'none', cursor: 'pointer' }} onClick={() => setShowDelete(!showDelete)}>
             <div>
-              <div style={label}>🔐 Change Password</div>
-              <div style={sub}>Update your account password</div>
+               <div style={{...label, color: 'var(--red)'}}>🚨 Delete Account</div>
+               <div style={sub}>Permanently remove your account</div>
             </div>
-            <div style={{ color: '#555', fontSize: 16 }}>{showPwForm ? '▲' : '▶'}</div>
+            <div style={{ color: 'var(--red)', fontSize: 18 }}>{showDelete ? '▲' : '▶'}</div>
           </div>
-          {showPwForm && (
-            <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input
-                type="password" placeholder="Current password" value={pwOld}
-                onChange={e => setPwOld(e.target.value)}
-                style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 14, outline: 'none', WebkitUserSelect: 'text', userSelect: 'text' }}
-              />
-              <input
-                type="password" placeholder="New password (min 6 chars)" value={pwNew}
-                onChange={e => setPwNew(e.target.value)}
-                style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 14, outline: 'none', WebkitUserSelect: 'text', userSelect: 'text' }}
-              />
-              {pwMsg && <div style={{ fontSize: 12, color: pwMsg.startsWith('✅') ? '#00b84c' : '#ff3b3b' }}>{pwMsg}</div>}
-              <button onClick={changePassword} style={{ padding: '10px', background: 'linear-gradient(135deg,#0084ff,#5b21b6)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
-                Update Password
-              </button>
-            </div>
+          
+          {showDelete && (
+             <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 13, color: '#fca5a5', fontWeight: 600 }}>Warning: This action is irreversible. All data, matches, and friends will be permanently lost.</div>
+                <input type="password" placeholder="Enter password to confirm" value={delPassword} onChange={e => setDelPassword(e.target.value)} style={{ height: 48, padding: '0 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(244,63,94,0.4)', borderRadius: 12, color: '#fff', fontSize: 15, outline: 'none' }} />
+                {delMsg && <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)' }}>{delMsg}</div>}
+                <button onClick={deleteAccount} style={{ height: 48, background: 'var(--red)', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer', boxShadow: '0 4px 15px rgba(244,63,94,0.4)' }}>Permanently Delete Account</button>
+             </div>
           )}
-          <div style={{ ...row, borderBottom: 'none', cursor: 'pointer' }} onClick={logout}>
-            <div style={{ ...label, color: '#ff3b3b' }}>🚪 Logout</div>
-            <div style={{ color: '#ff3b3b', fontSize: 16 }}>▶</div>
-          </div>
         </div>
 
       </div>
-
       <BottomNav />
     </div>
   );

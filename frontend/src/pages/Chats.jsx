@@ -247,7 +247,7 @@ export default function Chats() {
     if (forEveryone) {
       setChatMessages(prev => prev.map(m => m.msgId === msg.msgId ? { ...m, message: 'This message was deleted', deleted: true } : m));
     } else {
-      setChatMessages(prev => prev.filter(m => m.msgId !== msg.msgId));
+      setChatMessages(prev => prev.filter(m => m.msgId !== msgId));
     }
     setContextMenu(null);
   }
@@ -292,34 +292,27 @@ export default function Chats() {
     return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
   }
 
-  function formatLastSeen(ts) {
-    if (!ts) return 'a while ago';
-    const diff = Date.now() - ts;
-    if (diff < 60000) return 'just now';
-    if (diff < 3600000) return Math.floor(diff / 60000) + ' min ago';
-    if (diff < 86400000) return 'today at ' + new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    return new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
-  }
-
   const totalUnread = friends.reduce((sum, f) => sum + (f.unread || 0), 0);
 
-  if (loading) return <div style={{ minHeight: '100vh', background: '#0b141a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8696a0' }}>Loading Chats...</div>;
+  if (loading) return <div style={{ minHeight: '100vh', background: 'var(--bg-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa' }}>Loading Chats...</div>;
 
   return (
-    <div style={{ height: '100%', background: '#0b141a', color: '#e9edef', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: '100%', background: 'var(--bg-dark)', color: '#fff', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
       
-      {/* Chats Header */}
-      <header style={{ background: 'rgba(31, 44, 51, 0.95)', backdropFilter: 'blur(10px)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, zIndex: 10 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, flex: 1 }}>💬 Direct Messages</div>
+      {/* 🟢 Chats Main List Header - BACK BUTTON ADDED HERE */}
+      <header style={{ background: 'rgba(9, 9, 11, 0.85)', backdropFilter: 'blur(16px)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, zIndex: 10 }}>
+        {/* WAPAS HOME JAANE KA BUTTON */}
+        <button onClick={() => navigate('/dashboard')} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', width: 44, height: 44, borderRadius: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, transition: 'background 0.2s' }}>←</button>
+        <div style={{ fontSize: 22, fontWeight: 900, flex: 1 }}>💬 Direct Messages</div>
       </header>
 
       {/* Friends Active Chat List */}
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 60 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', paddingBottom: 100 }}>
         {friends.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#8696a0' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>💬</div>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No Active Chats</div>
-            <div style={{ fontSize: 12 }}>Go to Friends page to start a chat connection!</div>
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#71717a' }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>💬</div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>No Active Chats</div>
+            <div style={{ fontSize: 14 }}>Go to Friends page to start a conversation!</div>
           </div>
         ) : friends.map(friend => {
             let statusText = friend.is_online ? '🟢 Online' : '⚫ Offline';
@@ -327,22 +320,22 @@ export default function Chats() {
             else if (friend.activityStatus === 'in_match') statusText = '🔴 In Match';
 
             return (
-              <div key={friend.id} onClick={() => selectFriend(friend)} style={{ display: 'flex', alignItems: 'center', padding: '14px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.03)', WebkitTapHighlightColor: 'rgba(255,255,255,0.05)' }}>
-                <div style={{ position: 'relative', marginRight: 12, flexShrink: 0 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg,#0084ff,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, fontWeight: 700 }}>{friend.username.charAt(0).toUpperCase()}</div>
-                  <div style={{ position: 'absolute', bottom: -2, right: -2, width: 14, height: 14, borderRadius: '50%', background: friend.activityStatus === 'in_match' ? '#ff3b3b' : friend.is_online ? '#00b84c' : '#444', border: '2px solid #0b141a' }}></div>
+              <div key={friend.id} onClick={() => selectFriend(friend)} style={{ display: 'flex', alignItems: 'center', padding: '16px', cursor: 'pointer', background: 'var(--bg-card)', borderRadius: 20, marginBottom: 8, border: '1px solid rgba(255,255,255,0.03)', backdropFilter: 'blur(10px)', transition: 'background 0.2s' }}>
+                <div style={{ position: 'relative', marginRight: 16, flexShrink: 0 }}>
+                  <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'linear-gradient(135deg, var(--blue), var(--purple))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 900, boxShadow: '0 4px 10px rgba(59,130,246,0.3)' }}>{friend.username.charAt(0).toUpperCase()}</div>
+                  <div style={{ position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: '50%', background: friend.activityStatus === 'in_match' ? 'var(--red)' : friend.is_online ? 'var(--green)' : '#52525b', border: '3px solid var(--bg-dark)' }}></div>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 600, fontSize: 15 }}>{friend.username}</span>
-                    {friend.lastMessageTime && <span style={{ fontSize: 11, color: '#8696a0' }}>{formatTime(friend.lastMessageTime)}</span>}
+                    <span style={{ fontWeight: 800, fontSize: 16 }}>{friend.username}</span>
+                    {friend.lastMessageTime && <span style={{ fontSize: 12, color: '#a1a1aa', fontWeight: 600 }}>{formatTime(friend.lastMessageTime)}</span>}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
-                    <span style={{ fontSize: 13, color: '#8696a0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                    <span style={{ fontSize: 14, color: (friend.unread || 0) > 0 ? '#fff' : '#a1a1aa', fontWeight: (friend.unread || 0) > 0 ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>
                       {friend.lastMessage || statusText}
                     </span>
                     {(friend.unread || 0) > 0 && (
-                      <span style={{ background: 'linear-gradient(135deg, #00b84c, #0084ff)', color: '#fff', borderRadius: 12, minWidth: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, padding: '0 5px' }}>{friend.unread}</span>
+                      <span style={{ background: 'var(--blue)', color: '#fff', borderRadius: '50%', minWidth: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, padding: '0 6px', boxShadow: '0 2px 8px rgba(59,130,246,0.4)' }}>{friend.unread}</span>
                     )}
                   </div>
                 </div>
@@ -353,29 +346,37 @@ export default function Chats() {
 
       {/* ── CHAT OVERLAY VIEW ── */}
       {selectedChat && (
-        <div style={{ position: 'fixed', inset: 0, background: '#0b141a', backgroundImage: "url('data:image/svg+xml,%3Csvg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%23ffffff\" fill-opacity=\"0.02\"%3E%3Cpath d=\"M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')", zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-dark)', zIndex: 1000, display: 'flex', flexDirection: 'column', animation: 'slideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
           
-          <div style={{ background: 'rgba(31, 44, 51, 0.85)', backdropFilter: 'blur(15px)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, position: 'relative', zIndex: 10 }}>
+          {/* Active Chat Header */}
+          <div style={{ background: 'rgba(9, 9, 11, 0.85)', backdropFilter: 'blur(20px)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, position: 'relative', zIndex: 10 }}>
             <button onClick={() => { setSelectedChat(null); selectedChatRef.current = null; setIsTyping(false); setReplyingTo(null); setEditingMsg(null); setNewMessage(''); setShowEmojiPicker(false); }}
-              style={{ background: 'none', border: 'none', color: '#8696a0', fontSize: 24, cursor: 'pointer', padding: '0 4px' }}>←</button>
+              style={{ background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', padding: '0 8px', display: 'flex', alignItems: 'center' }}>←</button>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#0084ff,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, var(--blue), var(--purple))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900 }}>
                 {selectedChat.username.charAt(0).toUpperCase()}
               </div>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 16 }}>{selectedChat.username}</div>
-                <div style={{ fontSize: 11, color: isTyping ? '#00b84c' : '#8696a0' }}>
+                <div style={{ fontSize: 12, color: isTyping ? 'var(--green)' : '#a1a1aa', fontWeight: isTyping ? 700 : 500, transition: 'color 0.2s' }}>
                   {isTyping ? `is typing...` : selectedChat.activityStatus === 'in_match' ? '🔴 In Match' : selectedChat.is_online ? '🟢 Online' : 'Offline'}
                 </div>
               </div>
             </div>
             
-            <button onClick={clearChat} style={{ background: 'none', border: 'none', color: '#8696a0', fontSize: 20, cursor: 'pointer' }}>🗑️</button>
+            <button onClick={clearChat} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', width: 40, height: 40, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗑️</button>
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column' }} onClick={() => setShowEmojiPicker(false)}>
-            {chatMessages.map((msg, i) => {
+          {/* Chat Messages Area */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column' }} onClick={() => setShowEmojiPicker(false)}>
+            {chatMessages.length === 0 ? (
+              <div style={{ margin: 'auto', textAlign: 'center', color: '#71717a', padding: '30px', background: 'var(--bg-card)', borderRadius: 24 }}>
+                <div style={{ fontSize: 48, marginBottom: 16, filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.3))' }}>👋</div>
+                <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8, color: '#fff' }}>Say Hello!</div>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>Send a message or a 1v1 challenge.</div>
+              </div>
+            ) : chatMessages.map((msg, i) => {
               const isMine = msg.fromId == user?.id;
               const isDeleted = msg.deleted;
               const reactionEntries = Object.entries(msg.reactions || {}).filter(([, users]) => users.length > 0);
@@ -392,54 +393,60 @@ export default function Chats() {
                   onReply={() => { setReplyingTo(msg); setTimeout(() => inputRef.current?.focus(), 50); }}
                   onLongPress={handleLongPressStart} onLongPressEnd={handleLongPressEnd} onContextMenu={handleContextMenu}>
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', marginBottom: reactionEntries.length ? 14 : 8, width: '100%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', marginBottom: reactionEntries.length ? 16 : 10, width: '100%' }}>
                     <div style={{
-                        maxWidth: '78%', padding: isInvite ? '0' : '10px 14px',
-                        borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                        background: isMine ? 'linear-gradient(135deg, #0084ff, #5b21b6)' : 'rgba(255, 255, 255, 0.08)',
-                        border: isMine ? 'none' : '1px solid rgba(255, 255, 255, 0.05)',
-                        color: isDeleted ? 'rgba(255,255,255,0.5)' : '#fff', fontSize: 14
+                        maxWidth: '80%', padding: isInvite ? '0' : '12px 16px',
+                        borderRadius: isMine ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                        background: isMine ? 'linear-gradient(135deg, var(--blue), var(--purple))' : 'var(--bg-card)',
+                        border: isMine ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                        boxShadow: isMine ? '0 4px 15px rgba(59,130,246,0.3)' : '0 4px 15px rgba(0,0,0,0.1)',
+                        color: isDeleted ? 'rgba(255,255,255,0.5)' : '#fff', fontSize: 15, lineHeight: 1.4,
+                        position: 'relative'
                       }}>
                       
                       {msg.replyTo && !isInvite && (
-                        <div style={{ background: 'rgba(0,0,0,0.2)', borderLeft: `3px solid #0084ff`, borderRadius: 8, padding: '6px 10px', marginBottom: 8 }}>
-                          <div style={{ fontWeight: 700, fontSize: 11, color: '#53bdeb' }}>{msg.replyTo.from}</div>
-                          <div style={{ fontSize: 12, opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.replyTo.message}</div>
+                        <div style={{ background: 'rgba(0,0,0,0.2)', borderLeft: `3px solid ${isMine ? '#fff' : 'var(--blue)'}`, borderRadius: 8, padding: '8px 12px', marginBottom: 10 }}>
+                          <div style={{ fontWeight: 800, fontSize: 12, color: isMine ? '#fff' : 'var(--blue)', marginBottom: 2 }}>{msg.replyTo.from}</div>
+                          <div style={{ fontSize: 13, opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.replyTo.message}</div>
                         </div>
                       )}
                       
                       {isInvite ? (
-                        <div style={{ padding: '16px', textAlign: 'center', width: '220px', opacity: isExpired ? 0.75 : 1 }}>
-                          <div style={{ fontSize: 32, marginBottom: 8 }}>{isExpired ? '⌛' : '⚔️'}</div>
-                          <div style={{ fontWeight: 800, fontSize: 16 }}>{isExpired ? 'Challenge Expired' : '1v1 Challenge!'}</div>
-                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginBottom: 12 }}>ROOM: {inviteRoomId}</div>
+                        <div style={{ padding: '20px', textAlign: 'center', width: '240px', opacity: isExpired ? 0.7 : 1 }}>
+                          <div style={{ fontSize: 40, marginBottom: 12, filter: isExpired ? 'grayscale(100%)' : 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))' }}>{isExpired ? '⌛' : '⚔️'}</div>
+                          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 4 }}>{isExpired ? 'Challenge Expired' : '1v1 Challenge!'}</div>
+                          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginBottom: 16, fontWeight: 700, letterSpacing: 1 }}>ROOM: {inviteRoomId}</div>
+                          
                           {isExpired ? (
-                             <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '6px', fontSize: 12 }}>Invite is invalid.</div>
+                             <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: '10px', fontSize: 13, fontWeight: 600 }}>This invite is no longer valid.</div>
                           ) : isMine ? (
-                             <div style={{ color: '#4ade80', fontWeight: 700, fontSize: 12 }}>⏳ Waiting...</div>
+                             <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 12, padding: '10px', fontSize: 13, color: 'var(--green)', fontWeight: 800 }}>⏳ Waiting for opponent...</div>
                           ) : (
-                             <div style={{ display: 'flex', gap: 8 }}>
-                               <button onClick={() => navigate(`/game?room=${encodeURIComponent(inviteRoomId)}`)} style={{ flex: 1, background: '#00b84c', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 0', fontWeight: 800 }}>Accept</button>
-                               <button onClick={() => rejectChallenge(msg)} style={{ flex: 1, background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 8 }}>Reject</button>
+                             <div style={{ display: 'flex', gap: 10 }}>
+                               <button onClick={() => navigate(`/game?room=${encodeURIComponent(inviteRoomId)}`)} style={{ flex: 1, background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 0', fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>✓ Accept</button>
+                               <button onClick={() => rejectChallenge(msg)} style={{ flex: 1, background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 0', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>✕ Reject</button>
                              </div>
                           )}
+                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 16, fontWeight: 600 }}>{formatTime(msg.time)}</div>
                         </div>
                       ) : (
                         <div style={{ wordBreak: 'break-word', fontStyle: isDeleted ? 'italic' : 'normal' }}>
                           {isDeleted ? '🚫 This message was deleted' : msg.message}
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 5, marginTop: 4, fontSize: 10, opacity: 0.6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6, fontSize: 11, fontWeight: 600, color: isMine ? 'rgba(255,255,255,0.8)' : '#a1a1aa' }}>
                             {msg.edited && <span>edited</span>}
                             <span>{formatTime(msg.time)}</span>
-                            {isMine && !isDeleted && <span>{msg.status === 'seen' ? '✓✓' : '✓'}</span>}
+                            {isMine && !isDeleted && <span style={{ color: msg.status === 'seen' ? '#bbf7d0' : 'inherit' }}>{msg.status === 'seen' ? '✓✓' : '✓'}</span>}
                           </div>
                         </div>
                       )}
                     </div>
                     
                     {reactionEntries.length > 0 && (
-                      <div style={{ display: 'flex', gap: 4, marginTop: -6, padding: isMine ? '0 10px 0 0' : '0 0 0 10px' }}>
+                      <div style={{ display: 'flex', gap: 6, marginTop: -8, zIndex: 2, padding: isMine ? '0 12px 0 0' : '0 0 0 12px' }}>
                         {reactionEntries.map(([emoji, users]) => (
-                          <span key={emoji} style={{ background: '#1f2c33', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '2px 6px', fontSize: 12 }}>{emoji} {users.length}</span>
+                          <div key={emoji} style={{ background: users.includes(String(user?.id)) ? 'var(--blue)' : 'var(--bg-dark)', border: `1px solid ${users.includes(String(user?.id)) ? 'var(--blue)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 14, padding: '4px 8px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 4px 10px rgba(0,0,0,0.3)', backdropFilter: 'blur(10px)' }}>
+                            {emoji} <span style={{ fontSize: 11, fontWeight: 800 }}>{users.length}</span>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -448,47 +455,58 @@ export default function Chats() {
               );
             })}
             
-            {/* 🔴 TYPING ANIMATION ADDED BACK HERE 🔴 */}
+            {/* Typing Indicator */}
             {isTyping && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 10 }}>
-                <div style={{ background: 'rgba(255, 255, 255, 0.08)', backdropFilter: 'blur(10px)', borderRadius: '18px 18px 18px 4px', padding: '14px 18px', display: 'flex', gap: 6, alignItems: 'center', border: '1px solid rgba(255, 255, 255, 0.05)', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12 }}>
+                <div style={{ background: 'var(--bg-card)', backdropFilter: 'blur(10px)', borderRadius: '20px 20px 20px 4px', padding: '16px 20px', display: 'flex', gap: 6, alignItems: 'center', border: '1px solid rgba(255, 255, 255, 0.05)', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
                   {[0, 0.15, 0.3].map((delay, i) => (
                     <div key={i} className="liquid-dot" style={{ animationDelay: `${delay}s` }}></div>
                   ))}
                 </div>
               </div>
             )}
-            
             <div ref={chatEndRef} />
           </div>
 
-          {/* Input reply/edit wrapper */}
+          {/* Reply/Edit Preview Bar */}
           {(replyingTo || editingMsg) && (
-            <div style={{ background: '#162028', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ borderLeft: '3px solid #0084ff', paddingLeft: 10 }}>
-                <div style={{ fontSize: 11, color: '#53bdeb', fontWeight: 700 }}>{editingMsg ? '✏️ Edit Message' : '↩ Replying'}</div>
-                <div style={{ fontSize: 13, opacity: 0.7 }}>{editingMsg ? editingMsg.message : replyingTo?.message}</div>
+            <div style={{ background: 'rgba(9, 9, 11, 0.95)', borderTop: '1px solid rgba(255,255,255,0.05)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <div style={{ flex: 1, borderLeft: '3px solid var(--blue)', paddingLeft: 12, background: 'rgba(255,255,255,0.05)', borderRadius: '0 8px 8px 0', padding: '8px 12px' }}>
+                <div style={{ fontSize: 12, color: 'var(--blue)', fontWeight: 800, marginBottom: 4 }}>{editingMsg ? '✏️ Editing Message' : `↩ Replying to ${replyingTo?.from}`}</div>
+                <div style={{ fontSize: 14, color: '#a1a1aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{editingMsg ? editingMsg.message : replyingTo?.message}</div>
               </div>
-              <button onClick={() => { setReplyingTo(null); setEditingMsg(null); setNewMessage(''); }} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 16 }}>✕</button>
+              <button onClick={() => { setReplyingTo(null); setEditingMsg(null); setNewMessage(''); }} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 12 }}>✕</button>
             </div>
           )}
 
-          {/* Bottom Chat Bar */}
-          <div style={{ position: 'relative', background: '#1f2c33', padding: '10px 14px' }}>
+          {/* Premium Bottom Chat Input */}
+          <div style={{ position: 'relative', background: 'rgba(9, 9, 11, 0.85)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.08)', zIndex: 20 }}>
             {showEmojiPicker && (
-              <div style={{ position: 'absolute', bottom: '100%', left: 14, right: 14, marginBottom: 10, background: '#162028', borderRadius: 12, padding: 12, display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 200, overflowY: 'auto' }}>
+              <div style={{ position: 'absolute', bottom: '100%', left: 16, right: 16, marginBottom: 12, background: 'rgba(24, 24, 27, 0.95)', backdropFilter: 'blur(20px)', borderRadius: 20, border: '1px solid rgba(255,255,255,0.1)', padding: '16px', display: 'flex', flexWrap: 'wrap', gap: 10, maxHeight: 240, overflowY: 'auto', boxShadow: '0 -10px 40px rgba(0,0,0,0.5)' }}>
                 {EMOJI_LIST.map(em => (
-                  <button key={em} onClick={() => setNewMessage(prev => prev + em)} style={{ background: 'none', border: 'none', fontSize: 24 }}>{em}</button>
+                  <button key={em} onClick={() => setNewMessage(prev => prev + em)} style={{ background: 'none', border: 'none', fontSize: 28, cursor: 'pointer', padding: 4, transition: 'transform 0.1s' }} onMouseDown={e=>e.currentTarget.style.transform='scale(0.8)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'}>{em}</button>
                 ))}
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} style={{ background: 'none', border: 'none', fontSize: 24 }}>😀</button>
-              <button onClick={sendChallenge} style={{ background: 'none', border: 'none', fontSize: 24 }}>⚔️</button>
-              <input ref={inputRef} type="text" placeholder="Message..." value={newMessage} onChange={e => handleTyping(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMessage()}
-                style={{ flex: 1, padding: '10px 16px', background: 'rgba(0,0,0,0.3)', border: 'none', borderRadius: 20, color: '#fff', outline: 'none' }} />
-              <button onClick={sendMessage} disabled={!newMessage.trim()} style={{ background: 'none', border: 'none', fontSize: 22, color: newMessage.trim() ? '#0084ff' : '#666' }}>➤</button>
+            <div style={{ padding: '12px 16px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', width: 44, height: 44, borderRadius: 14, fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>😀</button>
+              <button onClick={sendChallenge} title="Send 1v1 Challenge" style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', width: 44, height: 44, borderRadius: 14, fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s' }}>⚔️</button>
+
+              <div style={{ flex: 1, position: 'relative' }}>
+                <input
+                  ref={inputRef} type="text" placeholder={editingMsg ? "Edit message..." : "Message..."} value={newMessage}
+                  onChange={e => handleTyping(e.target.value)} onFocus={() => setShowEmojiPicker(false)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                  style={{ width: '100%', height: 52, padding: '0 20px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 26, color: '#fff', fontSize: 16, outline: 'none', transition: 'border 0.3s' }}
+                  onFocusCapture={e => e.target.style.border = '1px solid var(--blue)'}
+                  onBlurCapture={e => e.target.style.border = '1px solid rgba(255,255,255,0.1)'}
+                />
+              </div>
+              
+              <button onClick={sendMessage} disabled={!newMessage.trim()}
+                style={{ width: 52, height: 52, borderRadius: '50%', background: newMessage.trim() ? 'linear-gradient(135deg, var(--blue), var(--purple))' : 'rgba(255,255,255,0.05)', color: '#fff', border: 'none', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s', opacity: newMessage.trim() ? 1 : 0.5, transform: newMessage.trim() ? 'scale(1)' : 'scale(0.9)', boxShadow: newMessage.trim() ? '0 4px 15px rgba(59,130,246,0.4)' : 'none' }}>
+                ➤
+              </button>
             </div>
           </div>
         </div>
@@ -496,32 +514,34 @@ export default function Chats() {
 
       {/* Context Actions Menu */}
       {contextMenu && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setContextMenu(null)}>
-          <div style={{ background: '#1f2c33', borderRadius: 14, minWidth: 220, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '12px', background: 'rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} onClick={() => setContextMenu(null)}>
+          <div style={{ background: 'rgba(24, 24, 27, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 24, overflow: 'hidden', minWidth: 260, boxShadow: '0 20px 60px rgba(0,0,0,0.5)', animation: 'popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '16px 12px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
               {EMOJIS.map(em => (
-                <button key={em} onClick={() => reactToMessage(contextMenu.msg.msgId, em)} style={{ background: 'none', border: 'none', fontSize: 24 }}>{em}</button>
+                <button key={em} onClick={() => reactToMessage(contextMenu.msg.msgId, em)}
+                  style={{ background: 'rgba(255,255,255,0.05)', border: 'none', fontSize: 26, width: 44, height: 44, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'transform 0.1s' }}
+                  onMouseDown={e => e.currentTarget.style.transform = 'scale(0.8)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}>{em}</button>
               ))}
             </div>
-            <button onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); setTimeout(() => inputRef.current?.focus(), 50); }} style={ctxBtn}>↩ Reply</button>
+            <button onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); setTimeout(() => inputRef.current?.focus(), 50); }} style={ctxBtn}>↩ Reply to Message</button>
             {contextMenu.msg.fromId == user?.id && !contextMenu.msg.deleted && (
               <button onClick={() => { setEditingMsg(contextMenu.msg); setNewMessage(contextMenu.msg.message); setContextMenu(null); setTimeout(() => inputRef.current?.focus(), 50); }} style={ctxBtn}>✏️ Edit Message</button>
             )}
             {contextMenu.msg.fromId == user?.id && !contextMenu.msg.deleted && (
-              <button onClick={() => deleteMsg(contextMenu.msg, true)} style={{ ...ctxBtn, color: '#ff4c4c' }}>🗑 Delete for Everyone</button>
+              <button onClick={() => deleteMsg(contextMenu.msg, true)} style={{ ...ctxBtn, color: 'var(--red)' }}>🗑 Delete for Everyone</button>
             )}
-            <button onClick={() => deleteMsg(contextMenu.msg, false)} style={{ ...ctxBtn, color: '#ff8080' }}>🗑 Delete for Me</button>
+            <button onClick={() => deleteMsg(contextMenu.msg, false)} style={{ ...ctxBtn, color: '#fca5a5', borderBottom: 'none' }}>🗑 Delete for Me</button>
           </div>
         </div>
       )}
 
-      <BottomNav unreadCount={totalUnread} />
-
-      {/* 🔴 CSS FOR TYPING ANIMATION ADDED BACK HERE 🔴 */}
       <style>{`
-        .liquid-dot { width: 8px; height: 8px; border-radius: 50%; background-color: #0084ff; animation: liquidWave 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1); }
-        @keyframes liquidWave { 0%, 100% { transform: translateY(0) scale(1); opacity: 0.4; } 50% { transform: translateY(-8px) scale(1.3); opacity: 1; background-color: #5b21b6; } }
+        @keyframes slideIn { 0% { transform: translateX(100%); } 100% { transform: translateX(0); } }
+        @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .liquid-dot { width: 10px; height: 10px; border-radius: 50%; background-color: var(--blue); animation: liquidWave 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes liquidWave { 0%, 100% { transform: translateY(0) scale(1); opacity: 0.4; } 50% { transform: translateY(-8px) scale(1.3); opacity: 1; background-color: var(--purple); } }
       `}</style>
+      <BottomNav unreadCount={totalUnread} />
     </div>
   );
 }
@@ -530,21 +550,39 @@ function SwipeableMessage({ msg, isMine, isDeleted, children, onReply, onLongPre
   const [slideX, setSlideX] = useState(0);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
+  const isSwiping = useRef(false);
+
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY;
+    isSwiping.current = false; onLongPress(msg);
+  };
+
+  const onTouchMove = (e) => {
+    const diffX = e.touches[0].clientX - touchStartX.current; const diffY = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (Math.abs(diffX) > 10 || diffY > 10) onLongPressEnd();
+    if (diffX > 10 && diffY < 25 && !isDeleted) isSwiping.current = true;
+    if (isSwiping.current && diffX > 0 && diffX <= 80) setSlideX(diffX);
+  };
+
+  const onTouchEnd = () => {
+    onLongPressEnd();
+    if (slideX > 50) { onReply(); if (window.navigator.vibrate) window.navigator.vibrate(40); }
+    setSlideX(0); isSwiping.current = false;
+  };
 
   return (
-    <div onTouchStart={e => { touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY; onLongPress(msg); }}
-         onTouchMove={e => {
-           const diffX = e.touches[0].clientX - touchStartX.current;
-           const diffY = Math.abs(e.touches[0].clientY - touchStartY.current);
-           if (Math.abs(diffX) > 10 || diffY > 10) onLongPressEnd();
-           if (diffX > 15 && diffY < 20 && !isDeleted && diffX <= 70) setSlideX(diffX);
-         }}
-         onTouchEnd={() => { onLongPressEnd(); if (slideX > 45) onReply(); setSlideX(0); }}
-         onContextMenu={e => onContextMenu(e, msg)}
-         style={{ width: '100%', transform: `translateX(${slideX}px)`, transition: slideX === 0 ? 'transform 0.3s' : 'none', display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
-      {children}
+    <div style={{ position: 'relative', display: 'flex', width: '100%', alignItems: 'center', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
+      {!isDeleted && (
+        <div style={{ position: 'absolute', left: isMine ? 'auto' : slideX - 50, right: isMine ? slideX - 50 : 'auto', opacity: slideX / 60, transform: `scale(${Math.min(slideX / 60, 1)})`, transition: slideX === 0 ? 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' : 'none', width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+          ↩️
+        </div>
+      )}
+      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onContextMenu={(e) => onContextMenu(e, msg)}
+        style={{ width: '100%', display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', transform: `translateX(${slideX}px)`, transition: slideX === 0 ? 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' : 'none', zIndex: 2 }}>
+        {children}
+      </div>
     </div>
   );
 }
 
-const ctxBtn = { display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', color: '#fff', textAlign: 'left', fontSize: 14, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' };
+const ctxBtn = { display: 'block', width: '100%', padding: '16px 20px', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#fff', textAlign: 'left', fontSize: 16, cursor: 'pointer', fontWeight: 700 };

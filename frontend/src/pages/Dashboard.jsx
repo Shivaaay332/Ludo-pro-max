@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import BottomNav from '../components/BottomNav.jsx';
 
-const colorHex = { blue: '#0084ff', red: '#ff3b3b', green: '#00b84c', yellow: '#ffcc00' };
+const colorHex = { blue: '#3b82f6', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b' };
 
 function authFetch(url, options = {}) {
   const token = localStorage.getItem('ludo_token');
@@ -39,7 +39,6 @@ export default function Dashboard() {
         setRecentGames(dash.recentGames || []);
       }
       
-      // Fetch friends to calculate initial unread messages
       const friendsData = await authFetch('/api/friends').then(r => r.json()).catch(() => ({}));
       if (friendsData.success && friendsData.friends && isMounted) {
         const unread = friendsData.friends.reduce((sum, f) => sum + (f.unread || 0), 0);
@@ -48,29 +47,16 @@ export default function Dashboard() {
       
       if (isMounted) setLoading(false);
 
-      // REAL-TIME SOCKET FOR UNREAD MESSAGES ON DASHBOARD
       const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
       const sock = io(BACKEND_URL, { transports: ['websocket', 'polling'], reconnection: true });
       socketRef.current = sock;
 
-      sock.on('connect', () => {
-        sock.emit('joinChat', { userId: me.user.id, username: me.user.username });
-      });
-
-      // Agar koi background me message bhejta hai, toh red dot turant update hoga
-      sock.on('newMessage', (data) => {
-        if (data.fromId !== me.user.id) {
-          setTotalUnread(prev => prev + 1);
-        }
-      });
+      sock.on('connect', () => { sock.emit('joinChat', { userId: me.user.id, username: me.user.username }); });
+      sock.on('newMessage', (data) => { if (data.fromId !== me.user.id) setTotalUnread(prev => prev + 1); });
     }
-    
     init();
 
-    return () => {
-      isMounted = false;
-      if (socketRef.current) socketRef.current.disconnect();
-    };
+    return () => { isMounted = false; if (socketRef.current) socketRef.current.disconnect(); };
   }, [navigate]);
 
   function genCode() {
@@ -92,8 +78,8 @@ export default function Dashboard() {
   }
 
   if (loading) return (
-    <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#0a0a1a,#12122a,#1a1a35)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: 14 }}>
-      Loading...
+    <div style={{ width: '100%', height: '100%', background: 'var(--bg-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', fontSize: 16, fontWeight: 600 }}>
+      Loading Area...
     </div>
   );
 
@@ -101,130 +87,163 @@ export default function Dashboard() {
   const medals = ['🥇', '🥈', '🥉'];
 
   return (
-    <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#0a0a1a,#12122a,#1a1a35)', color: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: '100%', background: 'radial-gradient(circle at top right, #1a1a2e, var(--bg-dark))', color: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      <header style={{ background: 'rgba(0,0,0,0.6)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#ffcc00' }}>🎲 Ludo Pro</div>
+      {/* Premium Header */}
+      <header style={{ background: 'rgba(9, 9, 11, 0.7)', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', backdropFilter: 'blur(16px)' }}>
+        <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--yellow)', letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>🎲</span> Ludo Pro
+        </div>
         
-        {/* Chat Button with Live Red Dot Indicator */}
-        <div onClick={() => navigate('/chats')} style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.1)', width: 36, height: 36, borderRadius: '50%' }}>
-          <span style={{ fontSize: 18 }}>💬</span>
+        <div onClick={() => navigate('/chats')} style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)', width: 44, height: 44, borderRadius: '50%', transition: 'background 0.2s' }}>
+          <span style={{ fontSize: 22 }}>💬</span>
           {totalUnread > 0 && (
-            <span style={{ position: 'absolute', top: -2, right: -2, background: '#ff3b3b', width: 14, height: 14, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, border: '2px solid #0a0a1a' }}>
+            <span style={{ position: 'absolute', top: -2, right: -2, background: 'var(--red)', width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, border: '2px solid #09090b', boxShadow: '0 2px 8px rgba(244,63,94,0.5)' }}>
               {totalUnread > 9 ? '9+' : totalUnread}
             </span>
           )}
         </div>
       </header>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '12px 14px', paddingBottom: 74, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', paddingBottom: 100, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* Welcome + stats */}
-        <div style={{ background: 'linear-gradient(135deg,rgba(0,132,255,0.15),rgba(124,58,237,0.15))', border: '1px solid rgba(0,132,255,0.2)', borderRadius: 14, padding: 14 }}>
-          <div style={{ fontSize: 14, color: '#aaa', marginBottom: 4 }}>Welcome back,</div>
-          <div style={{ fontSize: 20, fontWeight: 900, color: '#fff', marginBottom: 12 }}>
-            {user.username} <span style={{ color: '#ffcc00' }}>👋</span>
+        {/* Huge Welcome Card */}
+        <div style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 24, padding: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.3)', backdropFilter: 'blur(10px)' }}>
+          <div style={{ fontSize: 14, color: '#a1a1aa', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>Welcome back</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+            {user.username} <span style={{ fontSize: 26 }}>👋</span>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
             {[
-              { icon: '🏆', value: user.wins, label: 'Wins', color: '#ffcc00' },
-              { icon: '🎮', value: user.games_played, label: 'Games', color: '#0084ff' },
-              { icon: '💀', value: user.kills, label: 'Kills', color: '#ff3b3b' },
-              { icon: '📈', value: rate + '%', label: 'Win%', color: '#00b84c' },
+              { icon: '🏆', value: user.wins, label: 'Wins', color: 'var(--yellow)' },
+              { icon: '🎮', value: user.games_played, label: 'Games', color: 'var(--blue)' },
+              { icon: '💀', value: user.kills, label: 'Kills', color: 'var(--red)' },
+              { icon: '📈', value: rate + '%', label: 'Win %', color: 'var(--green)' },
             ].map(s => (
-              <div key={s.label} style={{ flex: 1, background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: '8px 4px', textAlign: 'center' }}>
-                <div style={{ fontSize: 15 }}>{s.icon}</div>
-                <div style={{ fontSize: 15, fontWeight: 900, color: s.color }}>{s.value}</div>
-                <div style={{ fontSize: 9, color: '#555', fontWeight: 600 }}>{s.label}</div>
+              <div key={s.label} style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 16, padding: '12px 6px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: 18, marginBottom: 4 }}>{s.icon}</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 10, color: '#a1a1aa', fontWeight: 700, marginTop: 4, textTransform: 'uppercase' }}>{s.label}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Play Section */}
-        <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: '#0084ff' }}>🎮 Play Now</div>
-          <div style={{ display: 'flex', gap: 8 }}>
+        {/* Modern Play Section (Large Touch Targets) */}
+        <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 24, padding: 20, backdropFilter: 'blur(10px)' }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16, color: 'var(--blue)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            🎮 Join or Create Room
+          </div>
+          
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             <input
               value={roomCode}
               onChange={e => setRoomCode(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === 'Enter' && joinGame()}
-              placeholder="Room Code"
+              placeholder="Enter Room Code"
               maxLength={20}
-              style={{ flex: 1, padding: '11px 14px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, color: '#fff', fontSize: 15, outline: 'none', WebkitUserSelect: 'text', userSelect: 'text' }}
+              style={{ flex: 1, padding: '0 20px', height: 52, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, color: '#fff', fontSize: 16, fontWeight: 600, outline: 'none', transition: 'border 0.3s' }}
             />
-            <button onClick={genCode} title="Generate random code" style={{ padding: '11px 13px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, background: 'rgba(255,255,255,0.08)', color: '#ccc', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>🎲</button>
-            <button onClick={joinGame} style={{ padding: '11px 18px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg,#0084ff,#5b21b6)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>▶ Go</button>
+            <button onClick={genCode} title="Generate random code" style={{ width: 52, height: 52, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🎲</button>
           </div>
-          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-            <button onClick={() => navigate('/game')} style={{ flex: 1, padding: '10px', border: '1px solid rgba(0,184,76,0.4)', borderRadius: 10, background: 'rgba(0,184,76,0.1)', color: '#00b84c', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-              🆕 Create New Room
+          
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={joinGame} style={{ flex: 1, height: 52, border: 'none', borderRadius: 16, background: 'linear-gradient(135deg, var(--blue), var(--purple))', color: '#fff', fontSize: 16, fontWeight: 800, boxShadow: '0 4px 15px rgba(59,130,246,0.4)' }}>
+              ▶ Join Game
+            </button>
+            <button onClick={() => navigate('/game')} style={{ flex: 1, height: 52, border: '1px solid rgba(16,185,129,0.3)', borderRadius: 16, background: 'rgba(16,185,129,0.1)', color: 'var(--green)', fontSize: 16, fontWeight: 800 }}>
+              🆕 Create Room
             </button>
           </div>
         </div>
 
-        {/* Two Column */}
-        <div style={{ display: 'flex', gap: 10, minHeight: 160 }}>
-
-          {/* Leaderboard */}
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#ffcc00' }}>🏆 Top Players</div>
+        {/* Stacked Layout instead of Cramped Columns */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          
+          {/* Leaderboard - Expanded */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 24, padding: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--yellow)' }}>🏆 Top Players</div>
+              <button onClick={openLeaderboard} style={{ background: 'none', border: 'none', color: 'var(--blue)', fontSize: 14, fontWeight: 700 }}>View All</button>
+            </div>
+            
             {leaderboard.length === 0 ? (
-              <div style={{ textAlign: 'center', color: '#555', fontSize: 11, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No data yet!</div>
+              <div style={{ textAlign: 'center', color: '#71717a', padding: '20px 0', fontWeight: 500 }}>No data yet!</div>
             ) : (
-              <>
-                {leaderboard.slice(0, 4).map((p, i) => (
-                  <div key={p.username} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <div style={{ width: 16, textAlign: 'center', fontSize: 12 }}>{medals[i] || (i + 1)}</div>
-                    <div style={{ flex: 1, fontWeight: 600, fontSize: 12, color: i === 0 ? 'gold' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#ccc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.username}</div>
-                    <div style={{ fontSize: 10, color: '#ffcc00', fontWeight: 700 }}>{p.wins}W</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {leaderboard.slice(0, 3).map((p, i) => (
+                  <div key={p.username} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'rgba(0,0,0,0.2)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.03)' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: i===0?'rgba(255,215,0,0.2)':i===1?'rgba(192,192,192,0.2)':'rgba(205,127,50,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{medals[i] || (i + 1)}</div>
+                    <div style={{ flex: 1, fontWeight: 700, fontSize: 16, color: i === 0 ? 'gold' : i === 1 ? '#c0c0c0' : '#cd7f32' }}>{p.username}</div>
+                    <div style={{ fontSize: 14, color: 'var(--yellow)', fontWeight: 800, background: 'rgba(255,204,0,0.1)', padding: '4px 10px', borderRadius: 8 }}>{p.wins} Wins</div>
                   </div>
                 ))}
-                <button onClick={openLeaderboard} style={{ marginTop: 'auto', padding: '6px 0', color: '#0084ff', fontSize: 11, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>View All →</button>
-              </>
+              </div>
             )}
           </div>
 
-          {/* Recent Games */}
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#0084ff' }}>📋 Recent</div>
+          {/* Recent Games - Expanded */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 24, padding: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>📋 Recent Matches</div>
+              <Link to="/profile" style={{ color: 'var(--blue)', fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>History</Link>
+            </div>
+
             {recentGames.length === 0 ? (
-              <div style={{ textAlign: 'center', color: '#555', fontSize: 11, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No games yet!</div>
+              <div style={{ textAlign: 'center', color: '#71717a', padding: '20px 0', fontWeight: 500 }}>No games played yet!</div>
             ) : (
-              <>
-                {recentGames.slice(0, 4).map((g, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <div style={{ width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 9, background: g.rank === 1 ? 'rgba(255,215,0,0.2)' : 'rgba(255,255,255,0.08)', color: g.rank === 1 ? 'gold' : '#888' }}>{g.rank}</div>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: colorHex[g.color] || '#fff', flexShrink: 0 }}></div>
-                    <div style={{ flex: 1, fontSize: 11, fontWeight: 600, color: colorHex[g.color] || '#fff' }}>{g.color?.toUpperCase()}</div>
-                    <div style={{ fontSize: 10, color: '#ff3b3b' }}>💀{g.kills}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {recentGames.slice(0, 3).map((g, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'rgba(0,0,0,0.2)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.03)' }}>
+                    <div style={{ width: 40, height: 40, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 18, background: g.rank === 1 ? 'linear-gradient(135deg, rgba(255,215,0,0.3), rgba(255,215,0,0.1))' : 'rgba(255,255,255,0.05)', color: g.rank === 1 ? 'gold' : '#a1a1aa', border: g.rank === 1 ? '1px solid rgba(255,215,0,0.3)' : 'none' }}>
+                      #{g.rank}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 700, color: colorHex[g.color] || '#fff', textTransform: 'capitalize' }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: colorHex[g.color] || '#fff', boxShadow: `0 0 8px ${colorHex[g.color]}` }}></div>
+                        {g.color} Team
+                      </div>
+                      <div style={{ fontSize: 12, color: '#71717a', marginTop: 2, fontWeight: 500 }}>{g.total_players} Players</div>
+                    </div>
+                    <div style={{ fontSize: 14, color: 'var(--red)', fontWeight: 800, background: 'rgba(244,63,94,0.1)', padding: '6px 12px', borderRadius: 8 }}>
+                      💀 {g.kills}
+                    </div>
                   </div>
                 ))}
-                <Link to="/profile" style={{ display: 'block', textAlign: 'center', marginTop: 'auto', padding: '6px 0', color: '#0084ff', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>All →</Link>
-              </>
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Leaderboard Modal */}
+      {/* Leaderboard Modal (Beautified) */}
       {lbModal && (
-        <div onClick={() => setLbModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 500, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#13132a', border: '1px solid rgba(255,215,0,0.3)', borderRadius: 18, padding: 18, maxWidth: 420, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <h3 style={{ color: 'gold', fontSize: 17 }}>🏆 Leaderboard</h3>
-              <button onClick={() => setLbModal(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', borderRadius: 8, width: 32, height: 32 }}>✕</button>
+        <div onClick={() => setLbModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', padding: '0' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#18181b', borderTop: '1px solid rgba(255,215,0,0.3)', borderRadius: '24px 24px 0 0', padding: '24px 20px', width: '100%', height: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -10px 40px rgba(0,0,0,0.5)' }}>
+            
+            <div style={{ width: 40, height: 5, background: 'rgba(255,255,255,0.2)', borderRadius: 4, margin: '0 auto 20px' }}></div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ color: 'var(--yellow)', fontSize: 22, fontWeight: 900 }}>🏆 Global Leaderboard</h3>
+              <button onClick={() => setLbModal(false)} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', borderRadius: 12, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
-            {fullLb.length === 0 ? <p style={{ color: '#666', textAlign: 'center', fontSize: 13 }}>No games yet!</p> : (
-              fullLb.map((p, i) => (
-                <div key={p.username} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ width: 28, textAlign: 'center', fontWeight: 800, fontSize: 13 }}>{medals[i] || (i + 1)}</div>
-                  <div style={{ flex: 1, fontWeight: 600, fontSize: 14, color: i === 0 ? 'gold' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#fff' }}>{p.username}</div>
-                  <div style={{ fontSize: 12, color: '#ffcc00', fontWeight: 700 }}>{p.wins}W</div>
-                  <div style={{ fontSize: 11, color: '#00b84c' }}>{p.win_rate}%</div>
-                </div>
-              ))
-            )}
+            
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
+              {fullLb.length === 0 ? <p style={{ color: '#71717a', textAlign: 'center', fontSize: 15, marginTop: 40 }}>No players ranked yet!</p> : (
+                fullLb.map((p, i) => (
+                  <div key={p.username} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px', borderBottom: '1px solid rgba(255,255,255,0.04)', background: i<3?'rgba(255,255,255,0.02)':'transparent', borderRadius: i<3?16:0, marginBottom: i<3?8:0 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: i===0?'rgba(255,215,0,0.2)':i===1?'rgba(192,192,192,0.2)':i===2?'rgba(205,127,50,0.2)':'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16, color: i===0?'gold':i===1?'#c0c0c0':i===2?'#cd7f32':'#a1a1aa' }}>
+                      {i < 3 ? medals[i] : `#${i + 1}`}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: i === 0 ? 'gold' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#fff' }}>{p.username}</div>
+                      <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 700, marginTop: 4 }}>{p.win_rate}% Win Rate</div>
+                    </div>
+                    <div style={{ fontSize: 16, color: 'var(--yellow)', fontWeight: 900 }}>{p.wins} <span style={{fontSize: 12, color: '#a1a1aa'}}>W</span></div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}

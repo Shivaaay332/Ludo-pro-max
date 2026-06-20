@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 const navItems = [
   { to: '/dashboard', icon: '🏠', label: 'Home' },
   { to: '/friends', icon: '👥', label: 'Friends' },
-  // Yahan se 'Play' wala object hata diya gaya hai
   { to: '/profile', icon: '👤', label: 'Profile' },
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ];
@@ -15,13 +14,14 @@ export default function BottomNav({ unreadCount = 0 }) {
   return (
     <nav style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 900,
-      background: 'rgba(10,10,26,0.97)',
-      borderTop: '1px solid rgba(255,255,255,0.1)',
+      background: 'rgba(9, 9, 11, 0.85)',
+      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
       display: 'flex', alignItems: 'stretch',
-      height: 60,
-      backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)',
-      paddingBottom: 'env(safe-area-inset-bottom, 0)',
+      height: 'calc(65px + env(safe-area-inset-bottom, 0px))', // Safe area for iPhones
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+      boxShadow: '0 -4px 24px rgba(0,0,0,0.4)'
     }}>
       {navItems.map(item => {
         const isActive = active === item.to || (item.to === '/game' && active.startsWith('/game'));
@@ -32,33 +32,29 @@ export default function BottomNav({ unreadCount = 0 }) {
             style={{
               flex: 1, display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
-              textDecoration: 'none', gap: 2,
-              color: isActive ? '#0084ff' : 'rgba(255,255,255,0.45)',
-              transition: 'color 0.2s',
+              textDecoration: 'none', gap: 4,
+              color: isActive ? 'var(--blue)' : '#71717a',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               position: 'relative',
+              transform: isActive ? 'translateY(-2px)' : 'translateY(0)'
             }}
           >
-            <div style={{ fontSize: 22, lineHeight: 1, position: 'relative' }}>
+            <div style={{ fontSize: 26, lineHeight: 1, position: 'relative', filter: isActive ? 'drop-shadow(0 4px 8px rgba(0,132,255,0.4))' : 'none' }}>
               {item.icon}
               {item.to === '/friends' && unreadCount > 0 && (
                 <span style={{
-                  position: 'absolute', top: -4, right: -6,
-                  background: '#ff3b3b', color: '#fff',
-                  borderRadius: '50%', width: 14, height: 14,
-                  fontSize: 9, fontWeight: 700,
+                  position: 'absolute', top: -4, right: -8,
+                  background: 'var(--red)', color: '#fff',
+                  borderRadius: '50%', width: 18, height: 18,
+                  fontSize: 10, fontWeight: 800,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '2px solid #09090b'
                 }}>{unreadCount > 9 ? '9+' : unreadCount}</span>
               )}
             </div>
-            <div style={{ fontSize: 9, fontWeight: isActive ? 700 : 500, letterSpacing: 0.2 }}>
+            <div style={{ fontSize: 11, fontWeight: isActive ? 700 : 500, letterSpacing: 0.3 }}>
               {item.label}
             </div>
-            {isActive && (
-              <div style={{
-                position: 'absolute', bottom: 0, left: '25%', right: '25%',
-                height: 2, background: '#0084ff', borderRadius: '2px 2px 0 0'
-              }} />
-            )}
           </Link>
         );
       })}
